@@ -28,6 +28,8 @@ private:
     CObjectVector<CItem> _items;
     bool _includeUserData = false;
     bool _dedupPaths = true;
+    enum class ECompressMode { Auto, Always, Never } _compressMode = ECompressMode::Auto;
+    bool _autoCompressDefault = false; // derived from existing items (auto mode)
 
     HRESULT Parse();
 };

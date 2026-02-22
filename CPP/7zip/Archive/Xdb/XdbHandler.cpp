@@ -339,6 +339,20 @@ HRESULT CHandler::Parse()
         }
     }
 
+    // derive default compress policy for auto mode
+    unsigned stored = 0, compressed = 0;
+    for (unsigned i = 0; i < _items.Size(); i++)
+    {
+        const CItem &it = _items[i];
+        if (it.IsDir)
+            continue;
+        if (it.Size == it.PackSize)
+            stored++;
+        else
+            compressed++;
+    }
+    _autoCompressDefault = (compressed > stored);
+
     // Expose userdata chunk as a stored file if present
     if (_includeUserData && userPos && userSize)
     {
@@ -558,6 +572,26 @@ Z7_COM7F_IMF(CHandler::SetProperties(const wchar_t * const *names, const PROPVAR
             _dedupPaths = !b; // keepdups=true -> dedup disabled
             continue;
         }
+        if (name.IsEqualTo_Ascii_NoCase("compress"))
+        {
+            bool b;
+            if (PropToBool(val, b))
+            {
+                _compressMode = b ? ECompressMode::Always : ECompressMode::Never;
+                continue;
+            }
+
+            if (val.vt == VT_BSTR)
+            {
+                UString v(val.bstrVal);
+                v.MakeLower_Ascii();
+                if (v.IsEqualTo_Ascii_NoCase("auto"))
+                    { _compressMode = ECompressMode::Auto; continue; }
+            }
+
+            return E_INVALIDARG;
+            continue;
+        }
         return E_INVALIDARG; // unknown property
     }
 
@@ -653,11 +687,55 @@ Z7_COM7F_IMF(CHandler::UpdateItems(ISequentialOutStream *outStream, UInt32 numIt
                 buf.insert(buf.end(), tmp, tmp + processed);
             }
             oi.Data.swap(buf);
-            oi.Size = oi.PackSize = (UInt64)oi.Data.size();
+            oi.Size = (UInt64)oi.Data.size();
 
+            // CRC is calculated over UNpacked data (to match our extract verification)
             static bool crcInit = []() -> bool { CrcGenerateTable(); return true; }();
             (void)crcInit;
-            oi.Crc = CrcCalc(oi.Data.data(), oi.Data.size());
+            oi.Crc = oi.Data.empty() ? 0 : CrcCalc(oi.Data.data(), oi.Data.size());
+
+            bool compressIt = false;
+            switch (_compressMode)
+            {
+                case ECompressMode::Always: compressIt = true; break;
+                case ECompressMode::Never:  compressIt = false; break;
+                case ECompressMode::Auto:   compressIt = _autoCompressDefault; break;
+            }
+
+            if (compressIt && !oi.Data.empty())
+            {
+                static bool lzoInit = false;
+                if (!lzoInit)
+                {
+                    if (lzo_init() != LZO_E_OK)
+                        return E_FAIL;
+                    lzoInit = true;
+                }
+
+                // worst-case output buffer as per minilzo docs
+                std::vector<Byte> comp(oi.Data.size() + oi.Data.size() / 16 + 64 + 3);
+                lzo_uint outLen = 0;
+                std::vector<Byte> wrk(LZO1X_1_MEM_COMPRESS);
+                const int rc = lzo1x_1_compress(
+                    oi.Data.data(), (lzo_uint)oi.Data.size(),
+                    comp.data(), &outLen,
+                    wrk.data());
+
+                if (rc == LZO_E_OK && outLen > 0 && outLen < oi.Data.size())
+                {
+                    comp.resize(outLen);
+                    oi.PackSize = outLen;
+                    oi.Data.swap(comp);
+                }
+                else
+                {
+                    oi.PackSize = (UInt64)oi.Data.size(); // store
+                }
+            }
+            else
+            {
+                oi.PackSize = (UInt64)oi.Data.size(); // store
+            }
         }
         else if (src)
         {
