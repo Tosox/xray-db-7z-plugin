@@ -309,6 +309,10 @@ HRESULT CHandler::Parse()
         if (item.Path.IsEmpty())
             continue;
 
+        // Optional filtering of dummy "_" directory entries (offset==0, size 0)
+        if (_filterDummyDirs && item.IsDir && item.Path.IsEqualTo_Ascii("_"))
+            continue;
+
         if (_dedupPaths)
         {
             UString norm = item.Path;
@@ -549,6 +553,14 @@ Z7_COM7F_IMF(CHandler::SetProperties(const wchar_t * const *names, const PROPVAR
             if (!PropToBool(val, b))
                 return E_INVALIDARG;
             _dedupPaths = !b; // keepdups=true -> dedup disabled
+            continue;
+        }
+        if (name.IsEqualTo_Ascii_NoCase("filterdummydirs") || name.IsEqualTo_Ascii_NoCase("filterdummy") || name.IsEqualTo_Ascii_NoCase("hide_dummy_dirs"))
+        {
+            bool b = true;
+            if (!PropToBool(val, b))
+                return E_INVALIDARG;
+            _filterDummyDirs = b;
             continue;
         }
 
