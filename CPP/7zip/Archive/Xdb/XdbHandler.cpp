@@ -222,6 +222,8 @@ Z7_COM7F_IMF(CHandler::Close())
     _items.Clear();
     _stream.Release();
     _phySize = 0;
+    _userData.clear();
+    _hasUserData = false;
     return S_OK;
 }
 
@@ -271,6 +273,8 @@ HRESULT CHandler::Parse()
     }
 
     _items.Clear();
+    _userData.clear();
+    _hasUserData = false;
 
     const Byte *p = hdrPlain.data();
     const Byte *end = p + hdrPlain.size();
@@ -364,6 +368,14 @@ HRESULT CHandler::Parse()
         userItem.PackSize = userSize;
         userItem.Crc = 0;
         _items.Add(userItem);
+    }
+
+    if (userPos && userSize)
+    {
+        _userData.resize((size_t)userSize);
+        RINOK(SeekAbs(_stream, userPos));
+        RINOK(ReadExact(_stream, _userData.data(), _userData.size()));
+        _hasUserData = true;
     }
 
     return _items.IsEmpty() ? S_FALSE : S_OK;
@@ -844,6 +856,13 @@ Z7_COM7F_IMF(CHandler::UpdateItems(ISequentialOutStream *outStream, UInt32 numIt
     std::vector<Byte> hdrComp(hdrCompPtr, hdrCompPtr + hdrCompSize);
     free(hdrCompPtr);
 
+    // ensure total archive size fits 32-bit offsets (include header chunk header, and optional userdata)
+    UInt64 totalSize = dataChunkStart + dataChunkSize + 8ULL + hdrComp.size();
+    if (_hasUserData && !_userData.empty())
+        totalSize += 8ULL + _userData.size();
+    if (totalSize > 0xFFFFFFFFull)
+        return E_FAIL;
+
     const UInt32 dataChunkId = kDbChunkData;
     RINOK(WriteAll(outStream, &dataChunkId, sizeof(UInt32)));
     RINOK(WriteAll(outStream, &dataChunkSize, sizeof(UInt32)));
@@ -874,6 +893,16 @@ Z7_COM7F_IMF(CHandler::UpdateItems(ISequentialOutStream *outStream, UInt32 numIt
     if (!hdrComp.empty())
         RINOK(WriteAll(outStream, hdrComp.data(), hdrComp.size()));
 
+    // append userdata chunk if present
+    if (_hasUserData && !_userData.empty())
+    {
+        const UInt32 userChunkId = kDbChunkUserData;
+        const UInt32 userSize32 = (UInt32)_userData.size();
+        RINOK(WriteAll(outStream, &userChunkId, sizeof(UInt32)));
+        RINOK(WriteAll(outStream, &userSize32, sizeof(UInt32)));
+        RINOK(WriteAll(outStream, _userData.data(), _userData.size()));
+    }
+
     _items.Clear();
     for (unsigned i = 0; i < outItems.Size(); i++)
     {
@@ -887,7 +916,9 @@ Z7_COM7F_IMF(CHandler::UpdateItems(ISequentialOutStream *outStream, UInt32 numIt
         it.Crc = oi.Crc;
         _items.Add(it);
     }
-    _phySize = (UInt64)(dataChunkStart + dataChunkSize + 8 + hdrComp.size());
+    _phySize = dataChunkStart + dataChunkSize + 8 + hdrComp.size();
+    if (_hasUserData && !_userData.empty())
+        _phySize += 8 + _userData.size();
 
     return cb->SetOperationResult(NArchive::NUpdate::NOperationResult::kOK);
     COM_TRY_END

@@ -6,6 +6,7 @@
 #include "Common/MyTypes.h"
 
 #include "Archive/IArchive.h"
+#include <vector>
 
 namespace NArchive {
 namespace NXdb {
@@ -30,6 +31,8 @@ private:
     bool _dedupPaths = true;
     enum class ECompressMode { Auto, Always, Never } _compressMode = ECompressMode::Auto;
     bool _autoCompressDefault = false; // derived from existing items (auto mode)
+    bool _hasUserData = false;
+    std::vector<Byte> _userData;
 
     HRESULT Parse();
 };
