@@ -650,6 +650,10 @@ Z7_COM7F_IMF(CHandler::UpdateItems(ISequentialOutStream *outStream, UInt32 numIt
 
             RINOK(cb->GetProperty(i, kpidIsDir, &prop));
             oi.IsDir = (prop.vt == VT_BOOL && prop.boolVal != VARIANT_FALSE);
+
+            // Check anti/delete flag if provided
+            if (cb->GetProperty(i, kpidIsAnti, &prop) == S_OK && prop.vt == VT_BOOL && prop.boolVal != VARIANT_FALSE)
+                continue; // delete: skip adding to outItems
         }
         else
         {
