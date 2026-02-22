@@ -19,6 +19,7 @@ extern "C" {
 #include <string>
 #include <sstream>
 #include <vector>
+#include <unordered_map>
 #include <cstdlib>
 #include <cstdio>
 
@@ -268,6 +269,8 @@ HRESULT CHandler::Parse()
     const Byte *p = hdrPlain.data();
     const Byte *end = p + hdrPlain.size();
 
+    std::unordered_map<std::wstring, unsigned> lastByPath; // used only if dedup enabled
+
     while (p < end)
     {
         // Need at least u16 + 4*u32 (min) before name
@@ -306,7 +309,27 @@ HRESULT CHandler::Parse()
         if (item.Path.IsEmpty())
             continue;
 
-        _items.Add(item);
+        if (_dedupPaths)
+        {
+            UString norm = item.Path;
+            norm.MakeLower_Ascii();
+            norm.Replace(L'/', L'\\');
+            const std::wstring key(norm);
+            auto it = lastByPath.find(key);
+            if (it == lastByPath.end())
+            {
+                lastByPath.emplace(key, (unsigned)_items.Size());
+                _items.Add(item);
+            }
+            else
+            {
+                _items[(int)it->second] = item; // replace with later occurrence (last wins)
+            }
+        }
+        else
+        {
+            _items.Add(item); // keep duplicates as-is
+        }
     }
 
     // Expose userdata chunk as a stored file if present
@@ -512,6 +535,22 @@ Z7_COM7F_IMF(CHandler::SetProperties(const wchar_t * const *names, const PROPVAR
             _includeUserData = b;
             continue;
         }
+        if (name.IsEqualTo_Ascii_NoCase("dedup"))
+        {
+            bool b = true;
+            if (!PropToBool(val, b))
+                return E_INVALIDARG;
+            _dedupPaths = b;
+            continue;
+        }
+        if (name.IsEqualTo_Ascii_NoCase("keepduplicates") || name.IsEqualTo_Ascii_NoCase("keepdups"))
+        {
+            bool b = false;
+            if (!PropToBool(val, b))
+                return E_INVALIDARG;
+            _dedupPaths = !b; // keepdups=true -> dedup disabled
+            continue;
+        }
 
         return E_INVALIDARG; // unknown property
     }
@@ -638,6 +677,32 @@ Z7_COM7F_IMF(CHandler::UpdateItems(ISequentialOutStream *outStream, UInt32 numIt
         }
 
         outItems.Add(oi);
+    }
+
+    // Optional deduplicate by path (keep last occurrence)
+    if (_dedupPaths)
+    {
+        std::unordered_map<std::wstring, unsigned> lastByPath;
+        CObjectVector<OutItem> deduped;
+        for (unsigned i = 0; i < outItems.Size(); i++)
+        {
+            // normalize to match header: lowercase ASCII and backslashes
+            UString norm = outItems[i].Path;
+            norm.MakeLower_Ascii();
+            norm.Replace(L'/', L'\\');
+            const std::wstring key(norm);
+            auto it = lastByPath.find(key);
+            if (it == lastByPath.end())
+            {
+                lastByPath.emplace(key, (unsigned)deduped.Size());
+                deduped.Add(outItems[i]);
+            }
+            else
+            {
+                deduped[(int)it->second] = outItems[i];
+            }
+        }
+        outItems = deduped;
     }
 
     const UInt64 dataChunkStart = 8;

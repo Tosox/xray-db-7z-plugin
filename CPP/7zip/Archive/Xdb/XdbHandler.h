@@ -27,6 +27,7 @@ private:
     UInt64 _phySize = 0;
     CObjectVector<CItem> _items;
     bool _includeUserData = false;
+    bool _dedupPaths = true;
 
     HRESULT Parse();
 };
