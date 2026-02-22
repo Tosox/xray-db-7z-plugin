@@ -50,13 +50,19 @@ static const Byte kProps[] =
     kpidIsDir
 };
 
-static const Byte kArcProps[] =
+enum
 {
-    kpidPhySize
+    kpidUserDataText = kpidUserDefined
+};
+
+static const CStatProp kArcProps[] =
+{
+    { NULL, kpidPhySize, VT_UI8 },
+    { "UserData", kpidUserDataText, VT_BSTR }
 };
 
 IMP_IInArchive_Props
-IMP_IInArchive_ArcProps
+IMP_IInArchive_ArcProps_WITH_NAME
 
 static inline UInt16 ReadLE16(const Byte *p)
 {
@@ -357,19 +363,6 @@ HRESULT CHandler::Parse()
     }
     _autoCompressDefault = (compressed > stored);
 
-    // Expose userdata chunk as a stored file if present
-    if (_includeUserData && userPos && userSize)
-    {
-        CItem userItem;
-        userItem.IsDir = false;
-        userItem.Path = L"_userdata.ltx";
-        userItem.Offset = userPos;
-        userItem.Size = userSize;
-        userItem.PackSize = userSize;
-        userItem.Crc = 0;
-        _items.Add(userItem);
-    }
-
     if (userPos && userSize)
     {
         _userData.resize((size_t)userSize);
@@ -518,6 +511,15 @@ Z7_COM7F_IMF(CHandler::GetArchiveProperty(PROPID propID, PROPVARIANT *value))
     switch (propID)
     {
         case kpidPhySize: prop = _phySize; break;
+        case kpidUserDataText:
+        {
+            if (_hasUserData && !_userData.empty())
+            {
+                std::string chunk((const char*)_userData.data(), _userData.size());
+                prop = MultiByteToUnicodeString(chunk.c_str(), CP_ACP);
+            }
+            break;
+        }
         default: break;
     }
     prop.Detach(value);
@@ -560,14 +562,6 @@ Z7_COM7F_IMF(CHandler::SetProperties(const wchar_t * const *names, const PROPVAR
         name.MakeLower_Ascii();
         const PROPVARIANT &val = values[i];
 
-        if (name.IsEqualTo_Ascii_NoCase("userdata"))
-        {
-            bool b = true;
-            if (!PropToBool(val, b))
-                return E_INVALIDARG;
-            _includeUserData = b;
-            continue;
-        }
         if (name.IsEqualTo_Ascii_NoCase("dedup"))
         {
             bool b = true;
