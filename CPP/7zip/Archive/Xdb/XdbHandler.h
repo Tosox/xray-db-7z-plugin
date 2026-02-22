@@ -20,7 +20,7 @@ struct CItem
     UInt32 Crc = 0;
 };
 
-Z7_CLASS_IMP_CHandler_IInArchive_1(ISetProperties)
+Z7_CLASS_IMP_CHandler_IInArchive_2(ISetProperties, IOutArchive)
 
 private:
     CMyComPtr<IInStream> _stream;

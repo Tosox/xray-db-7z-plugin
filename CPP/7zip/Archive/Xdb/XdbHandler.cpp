@@ -102,6 +102,53 @@ static HRESULT ReadExact(IInStream *s, void *buf, size_t size)
     return S_OK;
 }
 
+static inline void WriteLE16(std::vector<Byte> &v, UInt16 val)
+{
+    v.push_back((Byte)(val & 0xFF));
+    v.push_back((Byte)((val >> 8) & 0xFF));
+}
+
+static inline void WriteLE32(std::vector<Byte> &v, UInt32 val)
+{
+    v.push_back((Byte)(val & 0xFF));
+    v.push_back((Byte)((val >> 8) & 0xFF));
+    v.push_back((Byte)((val >> 16) & 0xFF));
+    v.push_back((Byte)((val >> 24) & 0xFF));
+}
+
+static HRESULT WriteAll(ISequentialOutStream *out, const void *data, size_t size)
+{
+    const Byte *p = (const Byte*)data;
+    size_t remaining = size;
+    while (remaining)
+    {
+        const UInt32 chunk = (UInt32)std::min<size_t>(remaining, 1 << 20);
+        UInt32 written = 0;
+        RINOK(out->Write(p, chunk, &written));
+        if (written != chunk)
+            return E_FAIL;
+        p += written;
+        remaining -= written;
+    }
+    return S_OK;
+}
+
+static HRESULT CopyFromInStream(IInStream *in, UInt64 offset, UInt64 size, ISequentialOutStream *out)
+{
+    static const size_t kBufSize = 1 << 16;
+    Byte buf[kBufSize];
+    RINOK(SeekAbs(in, offset));
+    UInt64 remaining = size;
+    while (remaining)
+    {
+        const size_t cur = (size_t)std::min<UInt64>(remaining, kBufSize);
+        RINOK(ReadExact(in, buf, cur));
+        RINOK(WriteAll(out, buf, cur));
+        remaining -= cur;
+    }
+    return S_OK;
+}
+
 // For signature probing: walk all chunks and ensure data+header exist and header is plausible.
 static HRESULT FindChunks(IInStream *s, UInt64 phySize,
                           UInt64 &dataChunkPos, UInt64 &dataChunkSize,
@@ -471,6 +518,230 @@ Z7_COM7F_IMF(CHandler::SetProperties(const wchar_t * const *names, const PROPVAR
 
     return S_OK;
     COM_TRY_END
+}
+
+Z7_COM7F_IMF(CHandler::UpdateItems(ISequentialOutStream *outStream, UInt32 numItems, IArchiveUpdateCallback *cb))
+{
+    COM_TRY_BEGIN
+
+    if (!outStream)
+        return E_FAIL;
+
+    struct OutItem
+    {
+        bool IsDir = false;
+        UString Path;
+        UInt64 Size = 0;
+        UInt64 PackSize = 0;
+        UInt32 Crc = 0;
+        UInt64 Offset = 0;
+        bool FromOld = false;
+        UInt32 SrcIndex = 0;
+        UInt64 SrcOffset = 0;
+        UInt64 SrcPackSize = 0;
+        std::vector<Byte> Data;
+    };
+
+    CObjectVector<OutItem> outItems;
+
+    UInt64 dataTotal = 0;
+
+    for (UInt32 i = 0; i < numItems; i++)
+    {
+        Int32 newData = 0, newProps = 0;
+        UInt32 indexInArc = (UInt32)(Int32)-1;
+        RINOK(cb->GetUpdateItemInfo(i, &newData, &newProps, &indexInArc));
+
+        OutItem oi;
+
+        const bool hasSrc = ((Int32)indexInArc != -1);
+        if (hasSrc && indexInArc >= (UInt32)_items.Size())
+            return E_INVALIDARG;
+
+        const CItem *src = hasSrc ? &_items[(int)indexInArc] : nullptr;
+
+        if (newProps || !src)
+        {
+            NWindows::NCOM::CPropVariant prop;
+            RINOK(cb->GetProperty(i, kpidPath, &prop));
+            if (prop.vt != VT_BSTR)
+                return E_INVALIDARG;
+            oi.Path = prop.bstrVal;
+            prop.Clear();
+
+            RINOK(cb->GetProperty(i, kpidIsDir, &prop));
+            oi.IsDir = (prop.vt == VT_BOOL && prop.boolVal != VARIANT_FALSE);
+        }
+        else
+        {
+            oi.Path = src->Path;
+            oi.IsDir = src->IsDir;
+        }
+
+        if (oi.Path.IsEmpty())
+            return E_INVALIDARG;
+
+        if (oi.IsDir)
+        {
+            oi.Size = oi.PackSize = 0;
+            oi.Crc = 0;
+            oi.Offset = 0;
+        }
+        else if (newData)
+        {
+            CMyComPtr<ISequentialInStream> inStream;
+            RINOK(cb->GetStream(i, &inStream));
+            if (!inStream)
+                return E_FAIL;
+
+            std::vector<Byte> buf;
+            const size_t kBuf = 1 << 16;
+            Byte tmp[kBuf];
+            for (;;)
+            {
+                UInt32 processed = 0;
+                RINOK(inStream->Read(tmp, (UInt32)kBuf, &processed));
+                if (processed == 0)
+                    break;
+                buf.insert(buf.end(), tmp, tmp + processed);
+            }
+            oi.Data.swap(buf);
+            oi.Size = oi.PackSize = (UInt64)oi.Data.size();
+
+            static bool crcInit = []() -> bool { CrcGenerateTable(); return true; }();
+            (void)crcInit;
+            oi.Crc = CrcCalc(oi.Data.data(), oi.Data.size());
+        }
+        else if (src)
+        {
+            oi.Size = src->Size;
+            oi.PackSize = src->PackSize;
+            oi.Crc = src->Crc;
+            oi.FromOld = true;
+            oi.SrcIndex = indexInArc;
+            oi.SrcOffset = src->Offset;
+            oi.SrcPackSize = src->PackSize;
+        }
+        else
+        {
+            return E_INVALIDARG;
+        }
+
+        if (oi.Size > 0xFFFFFFFFu || oi.PackSize > 0xFFFFFFFFu)
+            return E_FAIL;
+
+        if (!oi.IsDir)
+        {
+            dataTotal += oi.PackSize;
+            if (dataTotal > 0xFFFFFFFFull)
+                return E_FAIL;
+        }
+
+        outItems.Add(oi);
+    }
+
+    const UInt64 dataChunkStart = 8;
+    UInt64 cursor = dataChunkStart;
+    for (unsigned i = 0; i < outItems.Size(); i++)
+    {
+        OutItem &oi = outItems[i];
+        if (oi.IsDir || oi.PackSize == 0)
+        {
+            oi.Offset = 0;
+            continue;
+        }
+        oi.Offset = cursor;
+        cursor += oi.PackSize;
+        if (oi.Offset > 0xFFFFFFFFu || cursor > 0x100000000ull)
+            return E_FAIL;
+    }
+    const UInt32 dataChunkSize = (UInt32)(cursor - dataChunkStart);
+
+    std::vector<Byte> hdrPlain;
+    hdrPlain.reserve(outItems.Size() * 32);
+
+    for (unsigned i = 0; i < outItems.Size(); i++)
+    {
+        const OutItem &oi = outItems[i];
+        UString pathU = oi.Path;
+        pathU.MakeLower_Ascii();
+        pathU.Replace(L'/', L'\\');
+        AString pathA = UnicodeStringToMultiByte(pathU, CP_ACP);
+        const UInt32 nameLen = (UInt32)pathA.Len();
+        if (nameLen > 0xFFFF - 16)
+            return E_FAIL;
+
+        WriteLE16(hdrPlain, (UInt16)(nameLen + 16));
+        WriteLE32(hdrPlain, (UInt32)oi.Size);
+        WriteLE32(hdrPlain, (UInt32)oi.PackSize);
+        WriteLE32(hdrPlain, oi.Crc);
+        hdrPlain.insert(hdrPlain.end(), (const Byte*)pathA.Ptr(), (const Byte*)pathA.Ptr() + nameLen);
+        WriteLE32(hdrPlain, (UInt32)oi.Offset);
+    }
+
+    uint8_t *hdrCompPtr = nullptr;
+    size_t hdrCompSize = 0;
+    xray_re::xr_lzhuf::compress(hdrCompPtr, hdrCompSize,
+        hdrPlain.empty() ? nullptr : reinterpret_cast<const uint8_t*>(hdrPlain.data()),
+        hdrPlain.size());
+    if (!hdrCompPtr || hdrCompSize == 0)
+        return E_FAIL;
+    std::vector<Byte> hdrComp(hdrCompPtr, hdrCompPtr + hdrCompSize);
+    free(hdrCompPtr);
+
+    const UInt32 dataChunkId = kDbChunkData;
+    RINOK(WriteAll(outStream, &dataChunkId, sizeof(UInt32)));
+    RINOK(WriteAll(outStream, &dataChunkSize, sizeof(UInt32)));
+
+    for (unsigned i = 0; i < outItems.Size(); i++)
+    {
+        const OutItem &oi = outItems[i];
+        if (oi.IsDir || oi.PackSize == 0)
+            continue;
+
+        if (oi.FromOld)
+        {
+            if (!_stream)
+                return E_FAIL;
+            RINOK(CopyFromInStream(_stream, oi.SrcOffset, oi.SrcPackSize, outStream));
+        }
+        else
+        {
+            if (!oi.Data.empty())
+                RINOK(WriteAll(outStream, oi.Data.data(), oi.Data.size()));
+        }
+    }
+
+    const UInt32 hdrChunkId = kDbChunkHeader | kChunkCompressedFlag;
+    const UInt32 hdrSize32 = (UInt32)hdrComp.size();
+    RINOK(WriteAll(outStream, &hdrChunkId, sizeof(UInt32)));
+    RINOK(WriteAll(outStream, &hdrSize32, sizeof(UInt32)));
+    if (!hdrComp.empty())
+        RINOK(WriteAll(outStream, hdrComp.data(), hdrComp.size()));
+
+    _items.Clear();
+    for (unsigned i = 0; i < outItems.Size(); i++)
+    {
+        const OutItem &oi = outItems[i];
+        CItem it;
+        it.IsDir = oi.IsDir;
+        it.Path = oi.Path;
+        it.Offset = oi.Offset;
+        it.Size = oi.Size;
+        it.PackSize = oi.PackSize;
+        it.Crc = oi.Crc;
+        _items.Add(it);
+    }
+    _phySize = (UInt64)(dataChunkStart + dataChunkSize + 8 + hdrComp.size());
+
+    return cb->SetOperationResult(NArchive::NUpdate::NOperationResult::kOK);
+    COM_TRY_END
+}
+
+Z7_COM7F_IMF(CHandler::GetFileTimeType(UInt32 *type))
+{
+    *type = NFileTimeType::kNotDefined;
+    return S_OK;
 }
 
 } // NXdb
