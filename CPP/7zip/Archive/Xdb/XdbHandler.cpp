@@ -7,6 +7,7 @@
 #include "7zip/Common/RegisterArc.h"
 #include "7zip/Common/StreamUtils.h"
 
+#include "7zCrc.h"
 #include "XdbHandler.h"
 #include "xr_lzhuf.h"
 
@@ -129,31 +130,27 @@ static HRESULT FindChunks(IInStream *s, UInt64 phySize,
 
         const UInt32 chunkId = (chunkIdRaw & kChunkIdMask);
 
-        if (chunkId == kDbChunkData)
+        if (chunkId == kDbChunkData && dataChunkPos == 0)
         {
             dataChunkPos = dataPos;
             dataChunkSize = chunkSize;
         }
-        else if (chunkId == kDbChunkHeader)
+        else if (chunkId == kDbChunkHeader && hdrChunkPos == 0)
         {
             hdrChunkPos = dataPos;
             hdrChunkSize = chunkSize;
             hdrChunkIdRaw = chunkIdRaw;
         }
-        else if (chunkId == kDbChunkUserData)
+        else if (chunkId == kDbChunkUserData && userChunkPos == 0)
         {
             userChunkPos = dataPos;
             userChunkSize = chunkSize;
         }
 
         pos = nextPos;
-
-        // Only return success when *real* header + data found:
-        if (dataChunkPos && hdrChunkPos)
-            return S_OK;
     }
 
-    return S_FALSE;
+    return (dataChunkPos && hdrChunkPos) ? S_OK : S_FALSE;
 }
 
 Z7_COM7F_IMF(CHandler::Open(IInStream *stream, const UInt64 *, IArchiveOpenCallback *))
@@ -206,7 +203,11 @@ HRESULT CHandler::Parse()
         xray_re::xr_lzhuf::decompress(outPtr, outSize,
             reinterpret_cast<const uint8_t*>(hdrComp.data()), hdrComp.size());
         if (!outPtr || outSize == 0)
+        {
+            if (outPtr)
+                free(outPtr);
             return S_FALSE;
+        }
         hdrPlain.assign(outPtr, outPtr + outSize);
         free(outPtr); // allocated via malloc/realloc inside xr_lzhuf
     }
@@ -319,13 +320,22 @@ Z7_COM7F_IMF(CHandler::Extract(const UInt32 *indices, UInt32 numItems, Int32 tes
         lzoInit = true;
     }
 
+    const UInt32 totalItems = (UInt32)_items.Size();
+
+    // treat nullptr or "-1" as "extract everything"
+    if (numItems == (UInt32)-1 || indices == nullptr)
+        numItems = totalItems;
+
     for (UInt32 i = 0; i < numItems; i++)
     {
         const UInt32 index = indices ? indices[i] : i;
+        if (index >= totalItems)
+            return E_INVALIDARG;
+
         const CItem &it = _items[(int)index];
 
         Int32 askMode = testMode ? NArchive::NExtract::NAskMode::kTest : NArchive::NExtract::NAskMode::kExtract;
-        UInt32 res = 0;
+        UInt32 res = NArchive::NExtract::NOperationResult::kOK;
         CMyComPtr<ISequentialOutStream> outStream;
         RINOK(ecb->GetStream(index, &outStream, askMode));
         if (it.IsDir)
@@ -337,46 +347,61 @@ Z7_COM7F_IMF(CHandler::Extract(const UInt32 *indices, UInt32 numItems, Int32 tes
 
         RINOK(ecb->PrepareOperation(askMode));
 
+        const UInt64 endOffset = it.Offset + it.PackSize;
+        if (endOffset < it.Offset || endOffset > _phySize)
+        {
+            RINOK(ecb->SetOperationResult(NArchive::NExtract::NOperationResult::kDataError));
+            continue;
+        }
+
         // Read packed bytes at absolute offset (as db-converter does: data_full + offset)
         std::vector<Byte> packed((size_t)it.PackSize);
         RINOK(SeekAbs(_stream, it.Offset));
-        RINOK(ReadExact(_stream, packed.data(), (size_t)it.PackSize));
+        RINOK(ReadExact(_stream, packed.data(), packed.size()));
 
-        if (!testMode && outStream)
+        const Byte *dataPtr = packed.data();
+        size_t dataSize = packed.size();
+        std::vector<Byte> unpacked;
+
+        if (it.Size != it.PackSize)
         {
-            if (it.Size == it.PackSize)
+            // LZO1X
+            unpacked.resize((size_t)it.Size);
+            lzo_uint outLen = (lzo_uint)unpacked.size();
+            const int rc = lzo1x_decompress_safe(
+                packed.data(), (lzo_uint)packed.size(),
+                unpacked.data(), &outLen,
+                nullptr);
+
+            if (rc != LZO_E_OK || (UInt64)outLen != it.Size)
             {
-                // stored
-                UInt32 processed = 0;
-                RINOK(outStream->Write(packed.data(), (UInt32)packed.size(), &processed));
-                if (processed != packed.size())
-                    res = NArchive::NExtract::NOperationResult::kDataError;
+                res = NArchive::NExtract::NOperationResult::kDataError;
             }
             else
             {
-                // LZO1X
-                std::vector<Byte> unpacked((size_t)it.Size);
-                lzo_uint outLen = (lzo_uint)unpacked.size();
-                const int rc = lzo1x_decompress_safe(
-                    packed.data(), (lzo_uint)packed.size(),
-                    unpacked.data(), &outLen,
-                    nullptr);
-
-                if (rc != LZO_E_OK || (UInt64)outLen != it.Size)
-                {
-                    res = NArchive::NExtract::NOperationResult::kDataError;
-                }
-                else
-                {
-                    UInt32 processed = 0;
-                    RINOK(outStream->Write(unpacked.data(), (UInt32)unpacked.size(), &processed));
-                    if (processed != unpacked.size())
-                        res = NArchive::NExtract::NOperationResult::kDataError;
-                }
+                dataPtr = unpacked.data();
+                dataSize = (size_t)outLen;
             }
         }
 
-        RINOK(ecb->SetOperationResult(res == 0 ? NArchive::NExtract::NOperationResult::kOK : res));
+        if (res == NArchive::NExtract::NOperationResult::kOK && it.Crc != 0)
+        {
+            static bool crcInit = []() -> bool { CrcGenerateTable(); return true; }();
+            (void)crcInit;
+            const UInt32 crc = CrcCalc(dataPtr, dataSize);
+            if (crc != it.Crc)
+                res = NArchive::NExtract::NOperationResult::kCRCError;
+        }
+
+        if (!testMode && outStream && res == NArchive::NExtract::NOperationResult::kOK)
+        {
+            UInt32 processed = 0;
+            RINOK(outStream->Write(dataPtr, (UInt32)dataSize, &processed));
+            if (processed != dataSize)
+                res = NArchive::NExtract::NOperationResult::kDataError;
+        }
+
+        RINOK(ecb->SetOperationResult(res));
     }
 
     return S_OK;
