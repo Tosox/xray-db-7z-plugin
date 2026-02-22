@@ -28,7 +28,6 @@ private:
     CObjectVector<CItem> _items;
     bool _includeUserData = false;
     bool _dedupPaths = true;
-    bool _filterDummyDirs = true;
 
     HRESULT Parse();
 };

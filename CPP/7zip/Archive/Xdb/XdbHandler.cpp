@@ -150,6 +150,12 @@ static HRESULT CopyFromInStream(IInStream *in, UInt64 offset, UInt64 size, ISequ
     return S_OK;
 }
 
+static inline void TrimTrailingSlashes(UString &path)
+{
+    while (path.Len() && (path.Back() == L'/' || path.Back() == L'\\'))
+        path.DeleteBack();
+}
+
 // For signature probing: walk all chunks and ensure data+header exist and header is plausible.
 static HRESULT FindChunks(IInStream *s, UInt64 phySize,
                           UInt64 &dataChunkPos, UInt64 &dataChunkSize,
@@ -300,6 +306,7 @@ HRESULT CHandler::Parse()
         CItem item;
         item.IsDir = (offsetAbs == 0);
         item.Path = MultiByteToUnicodeString(nameA.c_str(), CP_ACP); // XRay paths are typically ANSI/ASCII
+        TrimTrailingSlashes(item.Path);
         item.Offset = offsetAbs;                                     // IMPORTANT: absolute offset
         item.Size = sizeReal;
         item.PackSize = sizeComp;
@@ -307,10 +314,6 @@ HRESULT CHandler::Parse()
 
         // Some headers may include empty entries; optionally skip them:
         if (item.Path.IsEmpty())
-            continue;
-
-        // Optional filtering of dummy "_" directory entries (offset==0, size 0)
-        if (_filterDummyDirs && item.IsDir && item.Path.IsEqualTo_Ascii("_"))
             continue;
 
         if (_dedupPaths)
@@ -555,15 +558,6 @@ Z7_COM7F_IMF(CHandler::SetProperties(const wchar_t * const *names, const PROPVAR
             _dedupPaths = !b; // keepdups=true -> dedup disabled
             continue;
         }
-        if (name.IsEqualTo_Ascii_NoCase("filterdummydirs") || name.IsEqualTo_Ascii_NoCase("filterdummy") || name.IsEqualTo_Ascii_NoCase("hide_dummy_dirs"))
-        {
-            bool b = true;
-            if (!PropToBool(val, b))
-                return E_INVALIDARG;
-            _filterDummyDirs = b;
-            continue;
-        }
-
         return E_INVALIDARG; // unknown property
     }
 
@@ -628,6 +622,8 @@ Z7_COM7F_IMF(CHandler::UpdateItems(ISequentialOutStream *outStream, UInt32 numIt
             oi.Path = src->Path;
             oi.IsDir = src->IsDir;
         }
+
+        TrimTrailingSlashes(oi.Path);
 
         if (oi.Path.IsEmpty())
             return E_INVALIDARG;
