@@ -409,11 +409,19 @@ static bool TryParseHeader(const std::vector<Byte> &payload, bool compressed,
             return false;
 
         const UInt32 expected = ReadLE32(payload.data());
-        if (expected == 0 || expected > headerMax)
+        if (expected > headerMax)
             return false;
 
-        if (!DecompressLzhuf(payload, plain, headerMax))
-            return false;
+        if (expected == 0)
+        {
+            // Empty headers are valid for empty archives.
+            plain.clear();
+        }
+        else
+        {
+            if (!DecompressLzhuf(payload, plain, headerMax))
+                return false;
+        }
     }
     else
     {
@@ -453,6 +461,13 @@ static bool TryParseHeader(const std::vector<Byte> &payload, bool compressed,
     {
         outItems = parsed;
         detected = DBVersion::V11XX;
+        return true;
+    }
+
+    if (plain.empty())
+    {
+        outItems.Clear();
+        detected = candidate;
         return true;
     }
 
@@ -587,7 +602,7 @@ HRESULT CHandler::Parse()
                     continue;
 
                 const UInt32 expected = ReadLE32(payload.data());
-                if (expected == 0 || expected > kHeaderMax)
+                if (expected > kHeaderMax)
                     continue;
 
                 compressed = true;
@@ -649,7 +664,7 @@ HRESULT CHandler::Parse()
         _hasUserData = true;
     }
 
-    return _items.IsEmpty() ? S_FALSE : S_OK;
+    return S_OK;
 }
 
 Z7_COM7F_IMF(CHandler::GetNumberOfItems(UInt32 *numItems))
