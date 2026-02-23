@@ -660,7 +660,15 @@ Z7_COM7F_IMF(CHandler::GetProperty(UInt32 index, PROPID propID, PROPVARIANT *val
 
     switch (propID)
     {
-        case kpidPath:      prop = it.Path; break;
+        case kpidPath:
+        {
+            UString path = it.Path;
+            // 7-Zip agent rename logic compares OS-style paths.
+            // Returning native separators avoids false "Parameter is incorrect" errors.
+            path.Replace(L'/', WCHAR_PATH_SEPARATOR);
+            prop = path;
+            break;
+        }
         case kpidIsDir:     prop = it.IsDir; break;
         case kpidSize:      if (!it.IsDir) prop = (UInt64)it.Size; break;
         case kpidPackSize:  if (!it.IsDir) prop = (UInt64)it.PackSize; break;
@@ -1040,18 +1048,50 @@ Z7_COM7F_IMF(CHandler::UpdateItems(ISequentialOutStream *outStream, UInt32 numIt
         if (newProps || !src)
         {
             NWindows::NCOM::CPropVariant prop;
-            RINOK(cb->GetProperty(i, kpidPath, &prop));
-            if (prop.vt != VT_BSTR)
-                return E_INVALIDARG;
-            oi.Path = prop.bstrVal;
+
+            // Some 7-Zip update paths expose renamed entries via kpidName.
+            HRESULT hPath = cb->GetProperty(i, kpidPath, &prop);
+            if (hPath == S_OK && prop.vt == VT_BSTR && prop.bstrVal != nullptr)
+            {
+                oi.Path = prop.bstrVal;
+            }
+            else if (hPath == S_OK && prop.vt == VT_EMPTY && src)
+            {
+                oi.Path = src->Path;
+            }
+            else
+            {
+                prop.Clear();
+                const HRESULT hName = cb->GetProperty(i, kpidName, &prop);
+                if (hName == S_OK && prop.vt == VT_BSTR && prop.bstrVal != nullptr)
+                    oi.Path = prop.bstrVal;
+                else if (src)
+                    oi.Path = src->Path;
+                else
+                    return E_INVALIDARG;
+            }
             prop.Clear();
 
-            RINOK(cb->GetProperty(i, kpidIsDir, &prop));
-            oi.IsDir = (prop.vt == VT_BOOL && prop.boolVal != VARIANT_FALSE);
+            const HRESULT hIsDir = cb->GetProperty(i, kpidIsDir, &prop);
+            if (hIsDir == S_OK && prop.vt == VT_BOOL)
+                oi.IsDir = (prop.boolVal != VARIANT_FALSE);
+            else if (src)
+                oi.IsDir = src->IsDir;
+            else if (hIsDir == S_OK && prop.vt == VT_EMPTY)
+                oi.IsDir = false;
+            else if (hIsDir != S_OK)
+                oi.IsDir = false;
+            else
+                return E_INVALIDARG;
+
+            prop.Clear();
 
             // Check anti/delete flag if provided
-            if (cb->GetProperty(i, kpidIsAnti, &prop) == S_OK && prop.vt == VT_BOOL && prop.boolVal != VARIANT_FALSE)
+            const HRESULT hAnti = cb->GetProperty(i, kpidIsAnti, &prop);
+            if (hAnti == S_OK && prop.vt == VT_BOOL && prop.boolVal != VARIANT_FALSE)
                 continue; // delete: skip adding to outItems
+            if (hAnti == S_OK && prop.vt != VT_EMPTY && prop.vt != VT_BOOL)
+                return E_INVALIDARG;
         }
         else
         {
