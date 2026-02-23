@@ -6,7 +6,7 @@
 
 ## ✨ Features
 
-- Read/write support for XDB, 2947RU, 2947WW, 2945, 2215, 1114, 1154 variants
+- Read/write support for XDB, 2947WW, 2947RU, 2945, 2215, 1114, 1154 variants
 - Auto‑detects format on open; configurable override for new archives
 - Honors per‑entry compression vs. store and keeps scrambling rules intact
 - Optional userdata embedding; shown read‑only in 7‑Zip as **UserData**
@@ -40,21 +40,29 @@
 
 ## 🧭 Usage in 7‑Zip
 
-Choose format **xdb**. Parameters go into 7‑Zip’s **Parameters** box (comma‑separated or space‑separated):
+Parameters:
+- `compress=auto|true|false` (default `auto`)
+  - Existing archive: `auto` follows the archive's current mix of compressed vs stored files
+  - New archive: `auto` defaults to `true`
+- `dbver=auto|xdb|2947ww|2947ru|2945|2215|11xx` (default `auto`)
+  - Existing archive: `auto` keeps the detected format
+  - New archive: `auto` defaults to `xdb`
+- `xdb_ud=PATH`: embed userdata from a file (bytes copied verbatim; only written for XDB)
+  - If the path contains spaces, quote it with either `"` or `'`
+- `keepdups=true|false` (default `false`): keep duplicate paths or keep only the last occurrence (used for incorrect archives)
 
-- `compress=auto|true|false` (default `auto`): compress new/modified files based on existing archive mix (`auto`), always (`true`), or never (`false`).
-- `dbver=auto|xdb|2947ru|2947ww|2945|2215|11xx` (default `auto`): force a variant for new archives or override detection.
-- `keepdups=true|false` (default `false`): keep duplicate paths or keep only the last occurrence.
-- `xdb_ud=PATH`: embed userdata from a file (bytes copied verbatim; only written for XDB).
+Game format notes:
+- Most S.T.A.L.K.E.R. games use `xdb`
+- **Shadow of Chernobyl** uses `2947ww` (World Wide) or `2947ru` (Russian release)
+
+Examples:
+- Add to `Parameters` field: `compress=true xdb_ud="D:\Mods\my mod\userdata.ltx"`
+- Add to `Parameters` field: `compress=false,dbver=2947ww,xdb_ud='D:\Mods\my mod\userdata.ltx'`
+- `7z.exe`: `7z a mymod.db0 .\gamedata\* -txdb -mcompress=true -mdbver=xdb -mxdb_ud="D:\Mods\my mod\userdata.ltx"`
 
 Archive properties shown in 7‑Zip:
 - **Userdata**: full userdata text
 - **DB-Format**: detected variant
-
-Other behavior:
-- Deletes: items marked “anti” in the update callback are removed on save.
-- CRC: verified on read when CRC is present.
-- Header safety: decompression capped and validated to avoid runaway buffers.
 
 ## 📂 Layout
 
