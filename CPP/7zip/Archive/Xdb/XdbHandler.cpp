@@ -244,7 +244,7 @@ HRESULT CHandler::Parse()
     _items.Clear();
     _userData.clear();
     _hasUserData = false;
-    _dbVersion = DbVersion::Unknown;
+    _dbVersion = DBVersion::UNKNOWN;
 
     UInt64 dataPos = 0, dataSize = 0, hdrPos = 0, hdrSize = 0;
     UInt64 userPos = 0, userSize = 0;
@@ -287,7 +287,7 @@ HRESULT CHandler::Parse()
         return true;
     };
 
-    auto try_mode = [&](const std::vector<Byte> &payload, bool compressed, DbVersion candidate) -> bool
+    auto try_mode = [&](const std::vector<Byte> &payload, bool compressed, DBVersion candidate) -> bool
     {
         std::vector<Byte> plain;
         if (compressed)
@@ -443,7 +443,7 @@ HRESULT CHandler::Parse()
             return !parsed.IsEmpty();
         };
 
-        auto parse_1114 = [&]() -> bool
+        auto parse_11XX = [&]() -> bool
         {
             const Byte *q = p;
             while (q < end)
@@ -479,7 +479,7 @@ HRESULT CHandler::Parse()
         };
 
         bool ok = false;
-        DbVersion detected = DbVersion::Unknown;
+        DBVersion detected = DBVersion::UNKNOWN;
 
         if (parse_2947())
         {
@@ -492,23 +492,23 @@ HRESULT CHandler::Parse()
             lastByPath.clear();
             if (parse_2945())
             {
-                detected = DbVersion::V2945;
-                ok = true;
-            }
+            detected = DBVersion::V2945;
+            ok = true;
+        }
             else
             {
                 parsed.Clear(); lastByPath.clear();
                 if (parse_2215())
                 {
-                    detected = DbVersion::V2215;
+                    detected = DBVersion::V2215;
                     ok = true;
                 }
                 else
                 {
                     parsed.Clear(); lastByPath.clear();
-                    if (parse_1114())
+                    if (parse_11XX())
                     {
-                        detected = DbVersion::V1114;
+                        detected = DBVersion::V11XX;
                         ok = true;
                     }
                 }
@@ -525,15 +525,15 @@ HRESULT CHandler::Parse()
 
     bool parsedOk = false;
 
-    auto attempt_order = [&](const std::vector<DbVersion> &order)
+    auto attempt_order = [&](const std::vector<DBVersion> &order)
     {
         std::vector<Byte> buf;
-        for (DbVersion v : order)
+        for (DBVersion v : order)
         {
-            if (v == DbVersion::V2947RU || v == DbVersion::V2947WW)
+            if (v == DBVersion::V2947RU || v == DBVersion::V2947WW)
             {
                 if (!hdrCompressed) continue;
-                xray_re::xr_scrambler scr(v == DbVersion::V2947RU
+                xray_re::xr_scrambler scr(v == DBVersion::V2947RU
                     ? xray_re::xr_scrambler::CC_RU
                     : xray_re::xr_scrambler::CC_WW);
                 buf.resize(hdrComp.size());
@@ -554,16 +554,16 @@ HRESULT CHandler::Parse()
         }
     };
 
-    if (_dbForce != DbVersion::Unknown)
+    if (_dbForce != DBVersion::UNKNOWN)
     {
         attempt_order({_dbForce});
     }
     else
     {
         if (hdrCompressed)
-            attempt_order({DbVersion::V2947WW, DbVersion::V2947RU, DbVersion::Xdb, DbVersion::V2945, DbVersion::V2215, DbVersion::V1114});
+            attempt_order({DBVersion::V2947WW, DBVersion::V2947RU, DBVersion::XDB, DBVersion::V2945, DBVersion::V2215, DBVersion::V11XX});
         else
-            attempt_order({DbVersion::Xdb, DbVersion::V2945, DbVersion::V2215, DbVersion::V1114});
+            attempt_order({DBVersion::XDB, DBVersion::V2945, DBVersion::V2215, DBVersion::V11XX});
     }
 
     if (!parsedOk)
@@ -679,12 +679,12 @@ Z7_COM7F_IMF(CHandler::Extract(const UInt32 *indices, UInt32 numItems, Int32 tes
         size_t dataSize = packed.size();
         std::vector<Byte> unpacked;
 
-        const bool needDecompress = (it.Size != it.PackSize) || it.UseLzhuf;
+    const bool needDecompress = (it.Size != it.PackSize) || it.UseLzhuf;
 
-        if (needDecompress)
+    if (needDecompress)
+    {
+        if (_dbVersion == DBVersion::V11XX && it.UseLzhuf)
         {
-            if (_dbVersion == DbVersion::V1114 && it.UseLzhuf)
-            {
                 uint8_t *outPtr = nullptr;
                 size_t outSize = 0;
                 xray_re::xr_lzhuf::decompress(outPtr, outSize,
@@ -769,12 +769,12 @@ Z7_COM7F_IMF(CHandler::GetArchiveProperty(PROPID propID, PROPVARIANT *value))
             const wchar_t *fmt = L"unknown";
             switch (_dbVersion)
             {
-                case DbVersion::Xdb:      fmt = L"xdb"; break;
-                case DbVersion::V2947RU:  fmt = L"2947ru"; break;
-                case DbVersion::V2947WW:  fmt = L"2947ww"; break;
-                case DbVersion::V2945:    fmt = L"2945"; break;
-                case DbVersion::V2215:    fmt = L"2215"; break;
-                case DbVersion::V1114:    fmt = L"11xx"; break;
+                case DBVersion::XDB:      fmt = L"xdb"; break;
+                case DBVersion::V2947RU:  fmt = L"2947ru"; break;
+                case DBVersion::V2947WW:  fmt = L"2947ww"; break;
+                case DBVersion::V2945:    fmt = L"2945"; break;
+                case DBVersion::V2215:    fmt = L"2215"; break;
+                case DBVersion::V11XX:    fmt = L"11xx"; break;
                 default: break;
             }
             prop = fmt;
@@ -866,19 +866,19 @@ Z7_COM7F_IMF(CHandler::SetProperties(const wchar_t * const *names, const PROPVAR
             UString v(val.bstrVal);
             v.MakeLower_Ascii();
             if (v.IsEqualTo_Ascii_NoCase("auto"))
-                _dbForce = DbVersion::Unknown;
+                _dbForce = DBVersion::UNKNOWN;
             else if (v.IsEqualTo_Ascii_NoCase("xdb"))
-                _dbForce = DbVersion::Xdb;
+                _dbForce = DBVersion::XDB;
             else if (v.IsEqualTo_Ascii_NoCase("2947ru"))
-                _dbForce = DbVersion::V2947RU;
+                _dbForce = DBVersion::V2947RU;
             else if (v.IsEqualTo_Ascii_NoCase("2947ww"))
-                _dbForce = DbVersion::V2947WW;
+                _dbForce = DBVersion::V2947WW;
             else if (v.IsEqualTo_Ascii_NoCase("2945"))
-                _dbForce = DbVersion::V2945;
+                _dbForce = DBVersion::V2945;
             else if (v.IsEqualTo_Ascii_NoCase("2215"))
-                _dbForce = DbVersion::V2215;
+                _dbForce = DBVersion::V2215;
             else if (v.IsEqualTo_Ascii_NoCase("11xx"))
-                _dbForce = DbVersion::V1114; // covers 1114/1154-style
+                _dbForce = DBVersion::V11XX; // covers 1114/1154-style
             else
                 return E_INVALIDARG;
             continue;
@@ -945,10 +945,10 @@ Z7_COM7F_IMF(CHandler::UpdateItems(ISequentialOutStream *outStream, UInt32 numIt
     if (!outStream)
         return E_FAIL;
 
-    DbVersion effVer = (_dbForce != DbVersion::Unknown) ? _dbForce
-                        : (_dbVersion != DbVersion::Unknown ? _dbVersion : DbVersion::Xdb);
-    if (effVer == DbVersion::Unknown)
-        effVer = DbVersion::Xdb;
+    DBVersion effVer = (_dbForce != DBVersion::UNKNOWN) ? _dbForce
+                        : (_dbVersion != DBVersion::UNKNOWN ? _dbVersion : DBVersion::XDB);
+    if (effVer == DBVersion::UNKNOWN)
+        effVer = DBVersion::XDB;
     _dbVersion = effVer;
 
     struct OutItem
@@ -1055,7 +1055,7 @@ Z7_COM7F_IMF(CHandler::UpdateItems(ISequentialOutStream *outStream, UInt32 numIt
 
             if (compressIt && !oi.Data.empty())
             {
-                if (effVer == DbVersion::V1114)
+                if (effVer == DBVersion::V11XX)
                 {
                     uint8_t *compPtr = nullptr;
                     size_t compSize = 0;
@@ -1190,7 +1190,7 @@ Z7_COM7F_IMF(CHandler::UpdateItems(ISequentialOutStream *outStream, UInt32 numIt
     std::vector<Byte> hdrPlain;
     hdrPlain.reserve(outItems.Size() * 32);
 
-    if (effVer == DbVersion::V2945)
+    if (effVer == DBVersion::V2945)
     {
         for (unsigned i = 0; i < outItems.Size(); i++)
         {
@@ -1207,7 +1207,7 @@ Z7_COM7F_IMF(CHandler::UpdateItems(ISequentialOutStream *outStream, UInt32 numIt
             WriteLE32(hdrPlain, (UInt32)oi.PackSize);
         }
     }
-    else if (effVer == DbVersion::V2215)
+    else if (effVer == DBVersion::V2215)
     {
         for (unsigned i = 0; i < outItems.Size(); i++)
         {
@@ -1223,7 +1223,7 @@ Z7_COM7F_IMF(CHandler::UpdateItems(ISequentialOutStream *outStream, UInt32 numIt
             WriteLE32(hdrPlain, (UInt32)oi.PackSize);
         }
     }
-    else if (effVer == DbVersion::V1114)
+    else if (effVer == DBVersion::V11XX)
     {
         for (unsigned i = 0; i < outItems.Size(); i++)
         {
@@ -1273,9 +1273,9 @@ Z7_COM7F_IMF(CHandler::UpdateItems(ISequentialOutStream *outStream, UInt32 numIt
     free(hdrCompPtr);
 
     // Optional scramble for 2947 RU/WW
-    if (effVer == DbVersion::V2947RU || effVer == DbVersion::V2947WW)
+    if (effVer == DBVersion::V2947RU || effVer == DBVersion::V2947WW)
     {
-        xray_re::xr_scrambler scr(effVer == DbVersion::V2947RU
+        xray_re::xr_scrambler scr(effVer == DBVersion::V2947RU
             ? xray_re::xr_scrambler::CC_RU
             : xray_re::xr_scrambler::CC_WW);
         std::vector<Byte> tmp(hdrComp.size());
@@ -1321,7 +1321,7 @@ Z7_COM7F_IMF(CHandler::UpdateItems(ISequentialOutStream *outStream, UInt32 numIt
         RINOK(WriteAll(outStream, hdrComp.data(), hdrComp.size()));
 
     // append userdata chunk if present and format supports it (XDB only)
-    if (effVer == DbVersion::Xdb && _hasUserData && !_userData.empty())
+    if (effVer == DBVersion::XDB && _hasUserData && !_userData.empty())
     {
         const UInt32 userChunkId = kDbChunkUserData;
         const UInt32 userSize32 = (UInt32)_userData.size();
@@ -1344,7 +1344,7 @@ Z7_COM7F_IMF(CHandler::UpdateItems(ISequentialOutStream *outStream, UInt32 numIt
         _items.Add(it);
     }
     _phySize = dataChunkStart + dataChunkSize + 8 + hdrComp.size();
-    if (effVer == DbVersion::Xdb && _hasUserData && !_userData.empty())
+    if (effVer == DBVersion::XDB && _hasUserData && !_userData.empty())
         _phySize += 8 + _userData.size();
 
     return cb->SetOperationResult(NArchive::NUpdate::NOperationResult::kOK);

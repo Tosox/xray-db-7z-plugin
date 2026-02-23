@@ -24,15 +24,15 @@ struct CItem
 
 Z7_CLASS_IMP_CHandler_IInArchive_2(ISetProperties, IOutArchive)
 
-    enum class DbVersion
+    enum class DBVersion
     {
-        Unknown = 0,
-        V1114,
+        UNKNOWN = 0,
+        V11XX,
         V2215,
         V2945,
         V2947RU,
         V2947WW,
-        Xdb
+        XDB
     };
 
 private:
@@ -44,8 +44,8 @@ private:
     bool _autoCompressDefault = false; // derived from existing items (auto mode)
     bool _hasUserData = false;
     std::vector<Byte> _userData;
-    DbVersion _dbVersion = DbVersion::Unknown;
-    DbVersion _dbForce = DbVersion::Unknown; // user override via dbver property
+    DBVersion _dbVersion = DBVersion::UNKNOWN;
+    DBVersion _dbForce = DBVersion::UNKNOWN; // user override via dbver property
 
     HRESULT Parse();
 };
