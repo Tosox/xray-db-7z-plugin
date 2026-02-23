@@ -18,19 +18,18 @@ extern "C" {
 
 #include <algorithm>
 #include <string>
-#include <sstream>
 #include <vector>
 #include <unordered_map>
 #include <cstdlib>
 #include <cstdio>
 #include <fstream>
 #include <cstring>
+#include <stdexcept>
 
-// Minimal hook so xr_lzhuf links; aborts on fatal.
+// Minimal hook so xr_lzhuf links; throw on fatal so we can catch.
 namespace xray_re {
 void die(const char* message, const char* file, unsigned line) {
-    std::printf("xr_lzhuf die: %s:%u: %s\n", file, line, message);
-    std::abort();
+    throw std::runtime_error(std::string("xr_lzhuf die: ") + file + ":" + std::to_string(line) + ": " + message);
 }
 } // namespace xray_re
 
@@ -264,14 +263,20 @@ HRESULT CHandler::Parse()
     RINOK(ReadExact(_stream, hdrComp.data(), hdrComp.size()));
 
     const bool hdrCompressed = (hdrIdRaw & kChunkCompressedFlag) != 0;
+    const UInt64 kHeaderMax = (_phySize > 0 && _phySize < (1ull << 26)) ? _phySize : (1ull << 26); // cap ~64MB or file size
 
-    auto decompress_lzhuf = [](const std::vector<Byte> &in, std::vector<Byte> &out) -> bool
+    auto decompress_lzhuf = [&](const std::vector<Byte> &in, std::vector<Byte> &out) -> bool
     {
         size_t outSize = 0;
         uint8_t *outPtr = nullptr;
-        xray_re::xr_lzhuf::decompress(outPtr, outSize,
-            reinterpret_cast<const uint8_t*>(in.data()), in.size());
-        if (!outPtr || outSize == 0)
+        try {
+            xray_re::xr_lzhuf::decompress(outPtr, outSize,
+                reinterpret_cast<const uint8_t*>(in.data()), in.size());
+        } catch (...) {
+            if (outPtr) free(outPtr);
+            return false;
+        }
+        if (!outPtr || outSize == 0 || outSize > kHeaderMax)
         {
             if (outPtr)
                 free(outPtr);
@@ -287,6 +292,11 @@ HRESULT CHandler::Parse()
         std::vector<Byte> plain;
         if (compressed)
         {
+            if (payload.size() < 4)
+                return false;
+            UInt32 expected = ReadLE32(payload.data());
+            if (expected == 0 || expected > kHeaderMax)
+                return false;
             if (!decompress_lzhuf(payload, plain))
                 return false;
         }
@@ -515,26 +525,45 @@ HRESULT CHandler::Parse()
 
     bool parsedOk = false;
 
-    // Attempt modes: plain, RU-scrambled, WW-scrambled (only meaningful if compressed)
-    std::vector<Byte> tmp = hdrComp;
-
-    if (try_mode(tmp, hdrCompressed, DbVersion::Xdb))
-        parsedOk = true;
-    else if (hdrCompressed)
+    auto attempt_order = [&](const std::vector<DbVersion> &order)
     {
-        // Try RU
-        xray_re::xr_scrambler scrRU(xray_re::xr_scrambler::CC_RU);
-        std::vector<Byte> dec(tmp.size());
-        scrRU.decrypt(dec.data(), tmp.data(), tmp.size());
-        if (try_mode(dec, true, DbVersion::V2947RU))
-            parsedOk = true;
-        else
+        std::vector<Byte> buf;
+        for (DbVersion v : order)
         {
-            xray_re::xr_scrambler scrWW(xray_re::xr_scrambler::CC_WW);
-            scrWW.decrypt(dec.data(), tmp.data(), tmp.size());
-            if (try_mode(dec, true, DbVersion::V2947WW))
-                parsedOk = true;
+            if (v == DbVersion::V2947RU || v == DbVersion::V2947WW)
+            {
+                if (!hdrCompressed) continue;
+                xray_re::xr_scrambler scr(v == DbVersion::V2947RU
+                    ? xray_re::xr_scrambler::CC_RU
+                    : xray_re::xr_scrambler::CC_WW);
+                buf.resize(hdrComp.size());
+                scr.decrypt(buf.data(), hdrComp.data(), hdrComp.size());
+                if (buf.size() >= 4)
+                {
+                    UInt32 expected = ReadLE32(buf.data());
+                    if (expected == 0 || expected > kHeaderMax)
+                        continue;
+                }
+                if (try_mode(buf, true, v)) { parsedOk = true; return; }
+            }
+            else
+            {
+                buf = hdrComp;
+                if (try_mode(buf, hdrCompressed, v)) { parsedOk = true; return; }
+            }
         }
+    };
+
+    if (_dbForce != DbVersion::Unknown)
+    {
+        attempt_order({_dbForce});
+    }
+    else
+    {
+        if (hdrCompressed)
+            attempt_order({DbVersion::V2947WW, DbVersion::V2947RU, DbVersion::Xdb, DbVersion::V2945, DbVersion::V2215, DbVersion::V1114});
+        else
+            attempt_order({DbVersion::Xdb, DbVersion::V2945, DbVersion::V2215, DbVersion::V1114});
     }
 
     if (!parsedOk)
