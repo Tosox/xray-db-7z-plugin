@@ -1086,6 +1086,21 @@ static bool BuildRawPropertyToken(const wchar_t *name, const PROPVARIANT &val, U
     return true;
 }
 
+static std::vector<Byte> MakeGeneratedXdbUserData()
+{
+    static const char kDefaultUserData[] =
+        "[header]\n"
+        "auto_load = true\n"
+        "level_name = stalker\n"
+        "level_ver = 1.0\n"
+        "entry_point = $fs_root$\\gamedata\\\n"
+        "creator = \"Modder\"\n"
+        "link = \"https://github.com/Tosox/xray-db-7z-plugin\"\n";
+
+    const Byte *begin = reinterpret_cast<const Byte*>(kDefaultUserData);
+    return std::vector<Byte>(begin, begin + sizeof(kDefaultUserData) - 1);
+}
+
 Z7_COM7F_IMF(CHandler::SetProperties(const wchar_t * const *names, const PROPVARIANT *values, UInt32 numProps))
 {
     COM_TRY_BEGIN
@@ -1184,6 +1199,14 @@ Z7_COM7F_IMF(CHandler::SetProperties(const wchar_t * const *names, const PROPVAR
         if (name.IsEqualTo_Ascii_NoCase("x"))
         {
             // Ignore value, use "compress" instead
+            continue;
+        }
+        if (name.IsEqualTo_Ascii_NoCase("gen_xdb_ud"))
+        {
+            bool b = false;
+            if (!PropToBool(val, b))
+                return E_INVALIDARG;
+            _genXdbUserData = b;
             continue;
         }
         if (name.IsEqualTo_Ascii_NoCase("compress"))
@@ -1590,10 +1613,24 @@ Z7_COM7F_IMF(CHandler::UpdateItems(ISequentialOutStream *outStream, UInt32 numIt
         hdrComp.swap(tmp);
     }
 
+    std::vector<Byte> generatedUserData;
+    const std::vector<Byte> *userDataToWrite = nullptr;
+    if (effVer == DBVersion::XDB)
+    {
+        if (_hasUserData && !_userData.empty())
+            userDataToWrite = &_userData;
+        else if (_genXdbUserData)
+        {
+            generatedUserData = MakeGeneratedXdbUserData();
+            if (!generatedUserData.empty())
+                userDataToWrite = &generatedUserData;
+        }
+    }
+
     // ensure total archive size fits 32-bit offsets (include header chunk header, and optional userdata)
     UInt64 totalSize = dataChunkStart + dataChunkSize + 8ULL + hdrComp.size();
-    if (_hasUserData && !_userData.empty())
-        totalSize += 8ULL + _userData.size();
+    if (userDataToWrite)
+        totalSize += 8ULL + userDataToWrite->size();
     if (totalSize > 0xFFFFFFFFull)
         return E_FAIL;
 
@@ -1628,13 +1665,27 @@ Z7_COM7F_IMF(CHandler::UpdateItems(ISequentialOutStream *outStream, UInt32 numIt
         RINOK(WriteAll(outStream, hdrComp.data(), hdrComp.size()));
 
     // append userdata chunk if present and format supports it (XDB only)
-    if (effVer == DBVersion::XDB && _hasUserData && !_userData.empty())
+    if (userDataToWrite)
     {
         const UInt32 userChunkId = kDbChunkUserData;
-        const UInt32 userSize32 = (UInt32)_userData.size();
+        const UInt32 userSize32 = (UInt32)userDataToWrite->size();
         RINOK(WriteAll(outStream, &userChunkId, sizeof(UInt32)));
         RINOK(WriteAll(outStream, &userSize32, sizeof(UInt32)));
-        RINOK(WriteAll(outStream, _userData.data(), _userData.size()));
+        RINOK(WriteAll(outStream, userDataToWrite->data(), userDataToWrite->size()));
+    }
+
+    if (effVer == DBVersion::XDB)
+    {
+        if (userDataToWrite)
+        {
+            _userData = *userDataToWrite;
+            _hasUserData = true;
+        }
+        else
+        {
+            _userData.clear();
+            _hasUserData = false;
+        }
     }
 
     _items.Clear();
@@ -1651,8 +1702,8 @@ Z7_COM7F_IMF(CHandler::UpdateItems(ISequentialOutStream *outStream, UInt32 numIt
         _items.Add(it);
     }
     _phySize = dataChunkStart + dataChunkSize + 8 + hdrComp.size();
-    if (effVer == DBVersion::XDB && _hasUserData && !_userData.empty())
-        _phySize += 8 + _userData.size();
+    if (userDataToWrite)
+        _phySize += 8 + userDataToWrite->size();
 
     return cb->SetOperationResult(NArchive::NUpdate::NOperationResult::kOK);
     COM_TRY_END
