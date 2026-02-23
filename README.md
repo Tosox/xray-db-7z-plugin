@@ -27,12 +27,16 @@
    ```pwsh
    git submodule update --init --recursive
    ```
-2. **Configure & build (x64)**
+2. **Configure & build**
    ```pwsh
    cmake -S . -B _build/x64 -G "Visual Studio 17 2022" -A x64
    cmake --build _build/x64 --config Release
    ```
-   Win32 build: replace `-A x64` with `-A Win32` and use `_build/Win32`.
+   * Win32 build: replace `-A x64` with `-A Win32` and use `_build/Win32`.
+
+   * Tested supported generators:
+     - `Visual Studio 17 2022`
+     - `Visual Studio 18 2026`
 
 3. **Result**
    - `_build/x64/bin/Release/XDB_x64.dll`
