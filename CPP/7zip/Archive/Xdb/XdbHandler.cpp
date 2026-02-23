@@ -557,7 +557,13 @@ HRESULT CHandler::Parse()
     RINOK(ReadExact(_stream, hdrComp.data(), hdrComp.size()));
 
     const bool hdrCompressed = (hdrIdRaw & kChunkCompressedFlag) != 0;
-    const UInt64 kHeaderMax = (_phySize > 0 && _phySize < (1ull << 26)) ? _phySize : (1ull << 26); // cap ~64MB or file size
+    // Allow small archives whose unpacked header can be larger than total archive size,
+    // but still keep a hard safety cap for malformed inputs.
+    UInt64 kHeaderMax = _phySize;
+    if (kHeaderMax < (1ull << 26)) // 64 MiB minimum cap
+        kHeaderMax = (1ull << 26);
+    if (kHeaderMax > (1ull << 28)) // 256 MiB hard ceiling
+        kHeaderMax = (1ull << 28);
 
     auto attempt_order = [&](const std::vector<DBVersion> &order) -> bool
     {
@@ -1461,7 +1467,7 @@ Z7_COM7F_IMF(CHandler::UpdateItems(ISequentialOutStream *outStream, UInt32 numIt
     for (unsigned i = 0; i < outItems.Size(); i++)
     {
         OutItem &oi = outItems[i];
-        if (oi.IsDir || oi.PackSize == 0)
+        if (oi.IsDir)
         {
             oi.Offset = 0;
             continue;
