@@ -553,6 +553,35 @@ static bool PropToBool(const PROPVARIANT &v, bool &res)
     }
 }
 
+static bool PropToUInt32(const PROPVARIANT &v, UInt32 &res)
+{
+    switch (v.vt)
+    {
+        case VT_UI1: res = v.bVal; return true;
+        case VT_UI2: res = v.uiVal; return true;
+        case VT_UI4: res = v.ulVal; return true;
+        case VT_I4:
+            if (v.lVal < 0) return false;
+            res = (UInt32)v.lVal;
+            return true;
+        case VT_BSTR:
+        {
+            const wchar_t *s = v.bstrVal;
+            if (!s || !*s) return false;
+            wchar_t *end = nullptr;
+            unsigned long val = wcstoul(s, &end, 10);
+            if (end && *end == 0)
+            {
+                res = (UInt32)val;
+                return true;
+            }
+            return false;
+        }
+        default:
+            return false;
+    }
+}
+
 Z7_COM7F_IMF(CHandler::SetProperties(const wchar_t * const *names, const PROPVARIANT *values, UInt32 numProps))
 {
     COM_TRY_BEGIN
@@ -592,6 +621,11 @@ Z7_COM7F_IMF(CHandler::SetProperties(const wchar_t * const *names, const PROPVAR
             if (len > 0)
                 f.read((char*)_userData.data(), len);
             _hasUserData = true;
+            continue;
+        }
+        if (name.IsEqualTo_Ascii_NoCase("x"))
+        {
+            // Ignore value, use "compress" instead
             continue;
         }
         if (name.IsEqualTo_Ascii_NoCase("compress"))
