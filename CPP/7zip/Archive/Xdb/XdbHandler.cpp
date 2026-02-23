@@ -22,6 +22,7 @@ extern "C" {
 #include <unordered_map>
 #include <cstdlib>
 #include <cstdio>
+#include <fstream>
 
 // Minimal hook so xr_lzhuf links; aborts on fatal.
 namespace xray_re {
@@ -562,20 +563,35 @@ Z7_COM7F_IMF(CHandler::SetProperties(const wchar_t * const *names, const PROPVAR
         name.MakeLower_Ascii();
         const PROPVARIANT &val = values[i];
 
-        if (name.IsEqualTo_Ascii_NoCase("dedup"))
-        {
-            bool b = true;
-            if (!PropToBool(val, b))
-                return E_INVALIDARG;
-            _dedupPaths = b;
-            continue;
-        }
-        if (name.IsEqualTo_Ascii_NoCase("keepduplicates") || name.IsEqualTo_Ascii_NoCase("keepdups"))
+        if (name.IsEqualTo_Ascii_NoCase("keepdups"))
         {
             bool b = false;
             if (!PropToBool(val, b))
                 return E_INVALIDARG;
-            _dedupPaths = !b; // keepdups=true -> dedup disabled
+            _dedupPaths = !b;
+            continue;
+        }
+        if (name.IsEqualTo_Ascii_NoCase("xdb_ud"))
+        {
+            _userData.clear();
+            _hasUserData = false;
+
+            if (val.vt != VT_BSTR || val.bstrVal == nullptr)
+                return E_INVALIDARG;
+
+            AString pathA = UnicodeStringToMultiByte(UString(val.bstrVal), CP_ACP);
+            std::ifstream f(pathA.Ptr(), std::ios::binary);
+            if (!f)
+                return E_INVALIDARG;
+            f.seekg(0, std::ios::end);
+            std::streamoff len = f.tellg();
+            if (len < 0)
+                return E_INVALIDARG;
+            _userData.resize((size_t)len);
+            f.seekg(0, std::ios::beg);
+            if (len > 0)
+                f.read((char*)_userData.data(), len);
+            _hasUserData = true;
             continue;
         }
         if (name.IsEqualTo_Ascii_NoCase("compress"))
