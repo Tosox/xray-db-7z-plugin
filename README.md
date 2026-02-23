@@ -2,16 +2,16 @@
 
 ## 📜 Description
 
-**Xray DB 7z Plugin** is a 7‑Zip format handler for S.T.A.L.K.E.R. database archives (XDB / 11xx / 2215 / 2945 / 2947 RU & WW). It lets you open, extract, update, delete, and create archives directly in 7‑Zip while preserving scrambling, compression, and userdata.
+**Xray DB 7z Plugin** lets you work with S.T.A.L.K.E.R. game archives in 7-Zip like normal archives. You can browse files, edit content, and build new mod archives without extra tools.
 
-## ✨ Features
+## 📋 Features
 
-- Read/write support for XDB, 2947WW, 2947RU, 2945, 2215, 1114, 1154 variants
-- Auto‑detects format on open; configurable override for new archives
-- Honors per‑entry compression vs. store and keeps scrambling rules intact
-- Optional userdata embedding; shown read‑only in 7‑Zip as **UserData**
-- Duplicate-path control (dedup on by default) and delete support
-- Safety checks: offset bounds, CRC verification on read, header size cap
+- Open, extract, and create S.T.A.L.K.E.R. DB archives directly with 7-Zip
+- Supports XDB, 2947WW, 2947RU, 2945, 2215, 1114 and 1154 archives
+- Edit archives in place (add, replace, rename, delete files and folders)
+- Keeps game-compatible archive behavior (compression, scrambling, userdata handling)
+- Auto-detects archive format and uses sensible defaults for new archives
+- Optional userdata from file, with automatic fallback userdata for new XDB archives
 
 ## 📦 Installation
 
@@ -49,6 +49,8 @@ Parameters:
   - New archive: `auto` defaults to `xdb`
 - `xdb_ud=PATH`: embed userdata from a file (bytes copied verbatim; only written for XDB)
   - If the path contains spaces, quote it with either `"` or `'`
+- `gen_xdb_ud=true|false` (default `true`): if no `xdb_ud` is provided and the selected format resolves to `xdb`, a fallback userdata block is generated automatically
+  - If `xdb_ud` is provided, it is always used instead of the generated fallback
 - `keepdups=true|false` (default `false`): keep duplicate paths or keep only the last occurrence (used for incorrect archives)
 
 Game format notes:
@@ -57,8 +59,9 @@ Game format notes:
 
 Examples:
 - Add to `Parameters` field: `compress=true xdb_ud="D:\Mods\my mod\userdata.ltx"`
-- Add to `Parameters` field: `compress=false,dbver=2947ww,xdb_ud='D:\Mods\my mod\userdata.ltx'`
-- `7z.exe`: `7z a mymod.db0 .\gamedata\* -txdb -mcompress=true -mdbver=xdb -mxdb_ud="D:\Mods\my mod\userdata.ltx"`
+- Add to `Parameters` field: `compress=false dbver=2947ww xdb_ud='D:\Mods\my mod\userdata.ltx'`
+- `7z.exe`: `7z a mymod.db0 .\gamedata\* -txdb -mdbver=xdb`
+- `7z.exe`: `7z a mymod.db0 .\gamedata\* -txdb -mdbver=xdb -mgen_xdb_ud=false`
 
 Archive properties shown in 7‑Zip:
 - **Userdata**: full userdata text
