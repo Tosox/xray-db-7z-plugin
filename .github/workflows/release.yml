@@ -36,6 +36,9 @@ jobs:
           mkdir -p release/bin
           cp -a artifact/XDB_x64/*.dll release/bin/ || true
           cp -a artifact/XDB_Win32/*.dll release/bin/ || true
+          cp LICENSE NOTICE release/ || true
+          mkdir -p release/licenses
+          cp third_party/7zip/DOC/License.txt release/licenses/7zip-License.txt || true
           cd release
           zip -r ../${{ env.PLUGIN_NAME }}-${{ github.event.inputs.build-ver }}.zip .
           cd ..
