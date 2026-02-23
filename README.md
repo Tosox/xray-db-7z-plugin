@@ -31,7 +31,6 @@ Pick format **Xdb** when adding/creating an archive. All per‑format options ar
 
 Supported parameters:
 - `compress=auto|true|false` (default `auto`): compression mode for new/modified files. `auto` mirrors the existing archive’s store/compress mix (for a brand‑new archive it defaults to store); `true` always compresses; `false` always stores.
-- `x=<level>`: standard 7‑Zip “Compression level” value. `0` forces store, any other level forces compress (alias for `compress=true/false`).
 - `keepdups=true|false` (default `false`): `true` keeps duplicate paths, `false` keeps only the last occurrence (dedup on).
 - `xdb_ud=<path>`: embed userdata from an external file (bytes are copied verbatim into the userdata chunk).
 - `dbver=auto|xdb|2947ru|2947ww|2945|2215|11xx` (default `auto`): force a specific DB variant; auto detects on open and defaults to `xdb` for new archives. `11xx` covers 1114/1154-era archives.
