@@ -14,7 +14,7 @@ namespace NXdb {
 struct CItem
 {
     bool IsDir = false;
-    bool UseLzhuf = false; // for legacy variants (1114)
+    bool UseLzhuf = false; // for legacy variants (11XX)
     UString Path;
     UInt64 Offset = 0;
     UInt64 Size = 0;
