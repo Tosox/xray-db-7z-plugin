@@ -633,7 +633,7 @@ HRESULT CHandler::Parse()
         else
             compressed++;
     }
-    _autoCompressDefault = (compressed > stored);
+    _autoCompressDefault = (compressed == 0 && stored == 0) || (compressed > stored);
 
     if (userPos && userSize)
     {
@@ -901,6 +901,170 @@ static bool PropToUInt32(const PROPVARIANT &v, UInt32 &res)
     }
 }
 
+static bool PropToUString(const PROPVARIANT &v, UString &res)
+{
+    res.Empty();
+    switch (v.vt)
+    {
+        case VT_EMPTY:
+            return true;
+        case VT_BSTR:
+            if (v.bstrVal)
+                res = v.bstrVal;
+            return true;
+        case VT_BOOL:
+            res = (v.boolVal != VARIANT_FALSE) ? L"true" : L"false";
+            return true;
+        case VT_UI1:
+        {
+            char tmp[16];
+            std::snprintf(tmp, sizeof(tmp), "%u", (unsigned)v.bVal);
+            res = MultiByteToUnicodeString(tmp, CP_ACP);
+            return true;
+        }
+        case VT_UI2:
+        {
+            char tmp[16];
+            std::snprintf(tmp, sizeof(tmp), "%u", (unsigned)v.uiVal);
+            res = MultiByteToUnicodeString(tmp, CP_ACP);
+            return true;
+        }
+        case VT_UI4:
+        {
+            char tmp[16];
+            std::snprintf(tmp, sizeof(tmp), "%u", (unsigned)v.ulVal);
+            res = MultiByteToUnicodeString(tmp, CP_ACP);
+            return true;
+        }
+        case VT_I4:
+        {
+            char tmp[16];
+            std::snprintf(tmp, sizeof(tmp), "%d", (int)v.lVal);
+            res = MultiByteToUnicodeString(tmp, CP_ACP);
+            return true;
+        }
+        default:
+            return false;
+    }
+}
+
+static void TrimWs(UString &s)
+{
+    while (s.Len() != 0 && (s[0] == L' ' || s[0] == L'\t'))
+        s.Delete(0, 1);
+    while (s.Len() != 0 && (s.Back() == L' ' || s.Back() == L'\t'))
+        s.DeleteBack();
+}
+
+static void StripOuterQuotes(UString &s)
+{
+    for (;;)
+    {
+        if (s.Len() < 2)
+            return;
+        const wchar_t front = s[0];
+        const wchar_t back = s.Back();
+        if ((front == L'"' && back == L'"') || (front == L'\'' && back == L'\''))
+        {
+            s.Delete(0, 1);
+            s.DeleteBack();
+            continue;
+        }
+        return;
+    }
+}
+
+static bool ReadFileToBytes_Wide(const UString &path, std::vector<Byte> &data)
+{
+    data.clear();
+
+#if defined(_WIN32)
+    FILE *f = nullptr;
+#if defined(_MSC_VER)
+    if (_wfopen_s(&f, path.Ptr(), L"rb") != 0 || f == nullptr)
+        return false;
+#else
+    f = _wfopen(path.Ptr(), L"rb");
+    if (f == nullptr)
+        return false;
+#endif
+
+    if (_fseeki64(f, 0, SEEK_END) != 0)
+    {
+        fclose(f);
+        return false;
+    }
+
+    const __int64 len64 = _ftelli64(f);
+    if (len64 < 0)
+    {
+        fclose(f);
+        return false;
+    }
+
+    if (_fseeki64(f, 0, SEEK_SET) != 0)
+    {
+        fclose(f);
+        return false;
+    }
+
+    data.resize((size_t)len64);
+    if (len64 > 0)
+    {
+        const size_t need = (size_t)len64;
+        const size_t got = fread(data.data(), 1, need, f);
+        if (got != need)
+        {
+            fclose(f);
+            data.clear();
+            return false;
+        }
+    }
+
+    fclose(f);
+    return true;
+#else
+    AString pathA = UnicodeStringToMultiByte(path, CP_UTF8);
+    std::ifstream f(pathA.Ptr(), std::ios::binary);
+    if (!f)
+        return false;
+    f.seekg(0, std::ios::end);
+    std::streamoff len = f.tellg();
+    if (len < 0)
+        return false;
+    data.resize((size_t)len);
+    f.seekg(0, std::ios::beg);
+    if (len > 0)
+        f.read((char*)data.data(), len);
+    return true;
+#endif
+}
+
+static bool LoadUserDataFile(const UString &rawPath, std::vector<Byte> &dataOut)
+{
+    UString path = rawPath;
+    TrimWs(path);
+    StripOuterQuotes(path);
+    TrimWs(path);
+    if (path.IsEmpty())
+        return false;
+    return ReadFileToBytes_Wide(path, dataOut);
+}
+
+static bool BuildRawPropertyToken(const wchar_t *name, const PROPVARIANT &val, UString &token)
+{
+    token = name;
+    if (val.vt == VT_EMPTY)
+        return true;
+
+    UString value;
+    if (!PropToUString(val, value))
+        return false;
+    token += L"=";
+    token += value;
+    return true;
+}
+
 Z7_COM7F_IMF(CHandler::SetProperties(const wchar_t * const *names, const PROPVARIANT *values, UInt32 numProps))
 {
     COM_TRY_BEGIN
@@ -948,22 +1112,52 @@ Z7_COM7F_IMF(CHandler::SetProperties(const wchar_t * const *names, const PROPVAR
             _userData.clear();
             _hasUserData = false;
 
-            if (val.vt != VT_BSTR || val.bstrVal == nullptr)
+            UString pathValue;
+            if (!PropToUString(val, pathValue))
                 return E_INVALIDARG;
 
-            AString pathA = UnicodeStringToMultiByte(UString(val.bstrVal), CP_ACP);
-            std::ifstream f(pathA.Ptr(), std::ios::binary);
-            if (!f)
+            UString mergedPath = pathValue;
+            UInt32 consumedTo = i;
+            bool loaded = LoadUserDataFile(mergedPath, _userData);
+
+            // GUI parameter parsing splits by spaces without quote awareness.
+            // Re-join following tokens only for quoted xdb_ud values.
+            if (!loaded)
+            {
+                UString trimmed = mergedPath;
+                TrimWs(trimmed);
+
+                wchar_t quote = 0;
+                if (!trimmed.IsEmpty() && (trimmed[0] == L'"' || trimmed[0] == L'\''))
+                    quote = trimmed[0];
+
+                bool quoteClosed = false;
+                if (quote != 0)
+                {
+                    if (trimmed.Len() >= 2 && trimmed.Back() == quote)
+                        quoteClosed = true;
+
+                    for (UInt32 j = i + 1; j < numProps && !quoteClosed; j++)
+                    {
+                        UString token;
+                        if (!BuildRawPropertyToken(names[j], values[j], token))
+                            return E_INVALIDARG;
+                        mergedPath += L" ";
+                        mergedPath += token;
+                        consumedTo = j;
+                        if (!token.IsEmpty() && token.Back() == quote)
+                            quoteClosed = true;
+                    }
+
+                    loaded = LoadUserDataFile(mergedPath, _userData);
+                }
+            }
+
+            if (!loaded)
                 return E_INVALIDARG;
-            f.seekg(0, std::ios::end);
-            std::streamoff len = f.tellg();
-            if (len < 0)
-                return E_INVALIDARG;
-            _userData.resize((size_t)len);
-            f.seekg(0, std::ios::beg);
-            if (len > 0)
-                f.read((char*)_userData.data(), len);
+
             _hasUserData = true;
+            i = consumedTo;
             continue;
         }
         if (name.IsEqualTo_Ascii_NoCase("x"))
