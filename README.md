@@ -34,12 +34,16 @@ Supported parameters:
 - `x=<level>`: standard 7‑Zip “Compression level” value. `0` forces store, any other level forces compress (alias for `compress=true/false`).
 - `keepdups=true|false` (default `false`): `true` keeps duplicate paths, `false` keeps only the last occurrence (dedup on).
 - `xdb_ud=<path>`: embed userdata from an external file (bytes are copied verbatim into the userdata chunk).
+- `dbver=auto|xdb|2947ru|2947ww|2945|2215|11xx` (default `auto`): force a specific DB variant; auto detects on open and defaults to `xdb` for new archives. `11xx` covers 1114/1154-era archives.
 
 Viewing userdata:
 - Open the archive properties pane in 7‑Zip and read the custom **UserData** property (full text, read‑only)
+Viewing format:
+- The archive properties pane also shows **DbFormat** indicating the detected variant (xdb, 2947ru, 2947ww, 2945, 2215, 11xx).
 
 Other behavior:
 - Deletes: marking an item as “anti” in the update callback removes it on save.
 - CRC verification: existing entries are checked when read; new data CRC is stored over uncompressed bytes.
 - Safety limits: offsets/ranges validated; archive size limited to 32‑bit offsets (format constraint).
 - The 7‑Zip compression level dropdown is honored via `x=` as described above.
+- Variant support: read/write for XDB, 2947RU/WW, 2945, 2215, 1114 (userdata chunk is only written for XDB).

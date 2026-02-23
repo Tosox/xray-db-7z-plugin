@@ -14,6 +14,7 @@ namespace NXdb {
 struct CItem
 {
     bool IsDir = false;
+    bool UseLzhuf = false; // for legacy variants (1114)
     UString Path;
     UInt64 Offset = 0;
     UInt64 Size = 0;
@@ -22,6 +23,17 @@ struct CItem
 };
 
 Z7_CLASS_IMP_CHandler_IInArchive_2(ISetProperties, IOutArchive)
+
+    enum class DbVersion
+    {
+        Unknown = 0,
+        V1114,
+        V2215,
+        V2945,
+        V2947RU,
+        V2947WW,
+        Xdb
+    };
 
 private:
     CMyComPtr<IInStream> _stream;
@@ -32,6 +44,8 @@ private:
     bool _autoCompressDefault = false; // derived from existing items (auto mode)
     bool _hasUserData = false;
     std::vector<Byte> _userData;
+    DbVersion _dbVersion = DbVersion::Unknown;
+    DbVersion _dbForce = DbVersion::Unknown; // user override via dbver property
 
     HRESULT Parse();
 };

@@ -21,6 +21,7 @@ set(SRC_XDB
   ${ROOT}/CPP/7zip/Archive/Xdb/XdbRegister.cpp
   ${ROOT}/third_party/minilzo/minilzo.c
   ${ROOT}/third_party/xray_re-tools/sources/xray_re/xr_lzhuf.cxx
+  ${ROOT}/third_party/xray_re-tools/sources/xray_re/xr_scrambler.cxx
   ${Z7_ROOT}/CPP/7zip/Archive/ArchiveExports.cpp
   ${Z7_ROOT}/CPP/7zip/Archive/DllExports2.cpp
 )
