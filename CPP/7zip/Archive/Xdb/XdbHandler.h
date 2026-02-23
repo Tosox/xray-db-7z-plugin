@@ -24,6 +24,7 @@ struct CItem
 
 Z7_CLASS_IMP_CHandler_IInArchive_2(ISetProperties, IOutArchive)
 
+public:
     enum class DBVersion
     {
         UNKNOWN = 0,

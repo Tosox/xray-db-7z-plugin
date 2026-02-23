@@ -36,6 +36,8 @@ void die(const char* message, const char* file, unsigned line) {
 namespace NArchive {
 namespace NXdb {
 
+using DBVersion = CHandler::DBVersion;
+
 static const UInt32 kChunkCompressedFlag = 0x80000000u;
 static const UInt32 kChunkIdMask         = ~kChunkCompressedFlag;
 
@@ -165,6 +167,298 @@ static inline void TrimTrailingSlashes(UString &path)
         path.DeleteBack();
 }
 
+static void NormalizePath(UString &path)
+{
+    path.MakeLower_Ascii();
+    path.Replace(L'/', L'\\');
+    TrimTrailingSlashes(path);
+}
+
+static void AddItemDedup(CObjectVector<CItem> &items, const CItem &item, bool dedup,
+                         std::unordered_map<std::wstring, unsigned> &lastByPath)
+{
+    if (!dedup)
+    {
+        items.Add(item);
+        return;
+    }
+
+    UString norm = item.Path;
+    norm.MakeLower_Ascii();
+    norm.Replace(L'/', L'\\');
+    const std::wstring key(norm);
+    auto it = lastByPath.find(key);
+    if (it == lastByPath.end())
+    {
+        lastByPath.emplace(key, (unsigned)items.Size());
+        items.Add(item);
+    }
+    else
+    {
+        items[(int)it->second] = item;
+    }
+}
+
+// LZHUF helper with hard limit and exception safety
+static bool DecompressLzhuf(const std::vector<Byte> &in, std::vector<Byte> &out, UInt64 maxOut)
+{
+    size_t outSize = 0;
+    uint8_t *outPtr = nullptr;
+    try
+    {
+        xray_re::xr_lzhuf::decompress(outPtr, outSize,
+            reinterpret_cast<const uint8_t*>(in.data()), in.size());
+    }
+    catch (...)
+    {
+        if (outPtr)
+            free(outPtr);
+        return false;
+    }
+
+    if (!outPtr || outSize == 0 || outSize > maxOut)
+    {
+        if (outPtr)
+            free(outPtr);
+        return false;
+    }
+
+    out.assign(outPtr, outPtr + outSize);
+    free(outPtr);
+    return true;
+}
+
+static bool ParseV2947(const Byte *start, const Byte *end, bool dedup, CObjectVector<CItem> &items)
+{
+    std::unordered_map<std::wstring, unsigned> lastByPath;
+    const Byte *p = start;
+    while (p < end)
+    {
+        if ((size_t)(end - p) < 2 + 4 + 4 + 4 + 4)
+            return false;
+
+        UInt16 nameField = ReadLE16(p); p += 2;
+        if (nameField < 16)
+            return false;
+
+        UInt32 nameLen = (UInt32)nameField - 16;
+        UInt32 sizeReal = ReadLE32(p); p += 4;
+        UInt32 sizeComp = ReadLE32(p); p += 4;
+        UInt32 crc = ReadLE32(p); p += 4;
+
+        if ((size_t)(end - p) < nameLen + 4)
+            return false;
+
+        std::string nameA((const char*)p, (size_t)nameLen);
+        p += nameLen;
+
+        UInt32 offset = ReadLE32(p); p += 4;
+
+        std::replace(nameA.begin(), nameA.end(), '\\', '/');
+
+        CItem it;
+        it.IsDir = (offset == 0);
+        it.Path = MultiByteToUnicodeString(nameA.c_str(), CP_ACP);
+        TrimTrailingSlashes(it.Path);
+        if (it.Path.IsEmpty())
+            continue;
+
+        it.Offset = offset;
+        it.Size = sizeReal;
+        it.PackSize = sizeComp;
+        it.Crc = crc;
+        it.UseLzhuf = false;
+
+        AddItemDedup(items, it, dedup, lastByPath);
+    }
+    return !items.IsEmpty();
+}
+
+static bool ParseV2945(const Byte *start, const Byte *end, bool dedup, CObjectVector<CItem> &items)
+{
+    std::unordered_map<std::wstring, unsigned> lastByPath;
+    const Byte *p = start;
+    while (p < end)
+    {
+        const char *nz = (const char*)memchr(p, 0, end - p);
+        if (!nz)
+            return false;
+
+        size_t nameLen = (size_t)(nz - (const char*)p);
+        std::string nameA((const char*)p, nameLen);
+        p = (const Byte*)(nz + 1);
+
+        if ((size_t)(end - p) < 4 + 4 + 4 + 4)
+            return false;
+
+        UInt32 crc = ReadLE32(p); p += 4;
+        UInt32 offset = ReadLE32(p); p += 4;
+        UInt32 sizeReal = ReadLE32(p); p += 4;
+        UInt32 sizeComp = ReadLE32(p); p += 4;
+
+        std::replace(nameA.begin(), nameA.end(), '\\', '/');
+
+        CItem it;
+        it.IsDir = (offset == 0);
+        it.Path = MultiByteToUnicodeString(nameA.c_str(), CP_ACP);
+        TrimTrailingSlashes(it.Path);
+        if (it.Path.IsEmpty())
+            continue;
+
+        it.Offset = offset;
+        it.Size = sizeReal;
+        it.PackSize = sizeComp;
+        it.Crc = crc;
+        it.UseLzhuf = false;
+
+        AddItemDedup(items, it, dedup, lastByPath);
+    }
+    return !items.IsEmpty();
+}
+
+static bool ParseV2215(const Byte *start, const Byte *end, bool dedup, CObjectVector<CItem> &items)
+{
+    std::unordered_map<std::wstring, unsigned> lastByPath;
+    const Byte *p = start;
+    while (p < end)
+    {
+        const char *nz = (const char*)memchr(p, 0, end - p);
+        if (!nz)
+            return false;
+
+        size_t nameLen = (size_t)(nz - (const char*)p);
+        std::string nameA((const char*)p, nameLen);
+        p = (const Byte*)(nz + 1);
+
+        if ((size_t)(end - p) < 4 + 4 + 4)
+            return false;
+
+        UInt32 offset = ReadLE32(p); p += 4;
+        UInt32 sizeReal = ReadLE32(p); p += 4;
+        UInt32 sizeComp = ReadLE32(p); p += 4;
+
+        std::replace(nameA.begin(), nameA.end(), '\\', '/');
+
+        CItem it;
+        it.IsDir = (offset == 0);
+        it.Path = MultiByteToUnicodeString(nameA.c_str(), CP_ACP);
+        TrimTrailingSlashes(it.Path);
+        if (it.Path.IsEmpty())
+            continue;
+
+        it.Offset = offset;
+        it.Size = sizeReal;
+        it.PackSize = sizeComp;
+        it.Crc = 0;
+        it.UseLzhuf = false;
+
+        AddItemDedup(items, it, dedup, lastByPath);
+    }
+    return !items.IsEmpty();
+}
+
+static bool ParseV11XX(const Byte *start, const Byte *end, bool dedup, CObjectVector<CItem> &items)
+{
+    std::unordered_map<std::wstring, unsigned> lastByPath;
+    const Byte *p = start;
+    while (p < end)
+    {
+        const char *nz = (const char*)memchr(p, 0, end - p);
+        if (!nz)
+            return false;
+
+        size_t nameLen = (size_t)(nz - (const char*)p);
+        std::string nameA((const char*)p, nameLen);
+        p = (const Byte*)(nz + 1);
+
+        if ((size_t)(end - p) < 4 + 4 + 4)
+            return false;
+
+        UInt32 uncompressedFlag = ReadLE32(p); p += 4;
+        UInt32 offset = ReadLE32(p); p += 4;
+        UInt32 sizeField = ReadLE32(p); p += 4;
+
+        std::replace(nameA.begin(), nameA.end(), '\\', '/');
+
+        CItem it;
+        it.IsDir = (offset == 0);
+        it.Path = MultiByteToUnicodeString(nameA.c_str(), CP_ACP);
+        TrimTrailingSlashes(it.Path);
+        if (it.Path.IsEmpty())
+            continue;
+
+        it.Offset = offset;
+        it.PackSize = sizeField;
+        it.Size = (uncompressedFlag != 0) ? sizeField : 0; // real size unknown when compressed
+        it.Crc = 0;
+        it.UseLzhuf = (uncompressedFlag == 0);
+
+        AddItemDedup(items, it, dedup, lastByPath);
+    }
+    return !items.IsEmpty();
+}
+
+static bool TryParseHeader(const std::vector<Byte> &payload, bool compressed,
+                           DBVersion candidate, UInt64 headerMax, bool dedup,
+                           CObjectVector<CItem> &outItems, DBVersion &detected)
+{
+    std::vector<Byte> plain;
+    if (compressed)
+    {
+        if (payload.size() < 4)
+            return false;
+
+        const UInt32 expected = ReadLE32(payload.data());
+        if (expected == 0 || expected > headerMax)
+            return false;
+
+        if (!DecompressLzhuf(payload, plain, headerMax))
+            return false;
+    }
+    else
+    {
+        plain = payload;
+    }
+
+    const Byte *start = plain.data();
+    const Byte *end = start + plain.size();
+
+    CObjectVector<CItem> parsed;
+
+    if (ParseV2947(start, end, dedup, parsed))
+    {
+        outItems = parsed;
+        detected = candidate;
+        return true;
+    }
+
+    parsed.Clear();
+    if (ParseV2945(start, end, dedup, parsed))
+    {
+        outItems = parsed;
+        detected = DBVersion::V2945;
+        return true;
+    }
+
+    parsed.Clear();
+    if (ParseV2215(start, end, dedup, parsed))
+    {
+        outItems = parsed;
+        detected = DBVersion::V2215;
+        return true;
+    }
+
+    parsed.Clear();
+    if (ParseV11XX(start, end, dedup, parsed))
+    {
+        outItems = parsed;
+        detected = DBVersion::V11XX;
+        return true;
+    }
+
+    return false;
+}
+
 // For signature probing: walk all chunks and ensure data+header exist and header is plausible.
 static HRESULT FindChunks(IInStream *s, UInt64 phySize,
                           UInt64 &dataChunkPos, UInt64 &dataChunkSize,
@@ -265,305 +559,63 @@ HRESULT CHandler::Parse()
     const bool hdrCompressed = (hdrIdRaw & kChunkCompressedFlag) != 0;
     const UInt64 kHeaderMax = (_phySize > 0 && _phySize < (1ull << 26)) ? _phySize : (1ull << 26); // cap ~64MB or file size
 
-    auto decompress_lzhuf = [&](const std::vector<Byte> &in, std::vector<Byte> &out) -> bool
+    auto attempt_order = [&](const std::vector<DBVersion> &order) -> bool
     {
-        size_t outSize = 0;
-        uint8_t *outPtr = nullptr;
-        try {
-            xray_re::xr_lzhuf::decompress(outPtr, outSize,
-                reinterpret_cast<const uint8_t*>(in.data()), in.size());
-        } catch (...) {
-            if (outPtr) free(outPtr);
-            return false;
-        }
-        if (!outPtr || outSize == 0 || outSize > kHeaderMax)
+        for (DBVersion v : order)
         {
-            if (outPtr)
-                free(outPtr);
-            return false;
-        }
-        out.assign(outPtr, outPtr + outSize);
-        free(outPtr);
-        return true;
-    };
+            std::vector<Byte> payload;
+            bool compressed = hdrCompressed;
 
-    auto try_mode = [&](const std::vector<Byte> &payload, bool compressed, DBVersion candidate) -> bool
-    {
-        std::vector<Byte> plain;
-        if (compressed)
-        {
-            if (payload.size() < 4)
-                return false;
-            UInt32 expected = ReadLE32(payload.data());
-            if (expected == 0 || expected > kHeaderMax)
-                return false;
-            if (!decompress_lzhuf(payload, plain))
-                return false;
-        }
-        else
-        {
-            plain = payload;
-        }
-
-        const Byte *p = plain.data();
-        const Byte *end = p + plain.size();
-
-        std::unordered_map<std::wstring, unsigned> lastByPath;
-        CObjectVector<CItem> parsed;
-
-        auto add_item = [&](CItem &item)
-        {
-            if (_dedupPaths)
+            if (v == DBVersion::V2947RU || v == DBVersion::V2947WW)
             {
-                UString norm = item.Path;
-                norm.MakeLower_Ascii();
-                norm.Replace(L'/', L'\\');
-                const std::wstring key(norm);
-                auto it = lastByPath.find(key);
-                if (it == lastByPath.end())
-                {
-                    lastByPath.emplace(key, (unsigned)parsed.Size());
-                    parsed.Add(item);
-                }
-                else
-                {
-                    parsed[(int)it->second] = item;
-                }
+                if (!hdrCompressed)
+                    continue;
+
+                payload.resize(hdrComp.size());
+                xray_re::xr_scrambler scr(v == DBVersion::V2947RU
+                    ? xray_re::xr_scrambler::CC_RU
+                    : xray_re::xr_scrambler::CC_WW);
+                scr.decrypt(payload.data(), hdrComp.data(), hdrComp.size());
+
+                if (payload.size() < 4)
+                    continue;
+
+                const UInt32 expected = ReadLE32(payload.data());
+                if (expected == 0 || expected > kHeaderMax)
+                    continue;
+
+                compressed = true;
             }
             else
             {
-                parsed.Add(item);
+                payload = hdrComp;
+                compressed = hdrCompressed;
             }
-        };
 
-        auto parse_2947 = [&]() -> bool
-        {
-            const Byte *q = p;
-            while (q < end)
+            CObjectVector<CItem> parsed;
+            DBVersion detected = DBVersion::UNKNOWN;
+            if (TryParseHeader(payload, compressed, v, kHeaderMax, _dedupPaths, parsed, detected))
             {
-                if ((size_t)(end - q) < 2 + 4 + 4 + 4 + 4)
-                    return false;
-                UInt16 nameField = ReadLE16(q); q += 2;
-                if (nameField < 16)
-                    return false;
-                UInt32 nameLen = (UInt32)nameField - 16;
-                UInt32 sizeReal = ReadLE32(q); q += 4;
-                UInt32 sizeComp = ReadLE32(q); q += 4;
-                UInt32 crc = ReadLE32(q); q += 4;
-                if ((size_t)(end - q) < nameLen + 4)
-                    return false;
-                std::string nameA((const char*)q, (size_t)nameLen);
-                q += nameLen;
-                UInt32 offset = ReadLE32(q); q += 4;
-
-                std::replace(nameA.begin(), nameA.end(), '\\', '/');
-
-                CItem it;
-                it.IsDir = (offset == 0);
-                it.Path = MultiByteToUnicodeString(nameA.c_str(), CP_ACP);
-                TrimTrailingSlashes(it.Path);
-                if (it.Path.IsEmpty())
-                    continue;
-                it.Offset = offset;
-                it.Size = sizeReal;
-                it.PackSize = sizeComp;
-                it.Crc = crc;
-                it.UseLzhuf = false;
-                add_item(it);
-            }
-            return !parsed.IsEmpty();
-        };
-
-        auto parse_2945 = [&]() -> bool
-        {
-            const Byte *q = p;
-            while (q < end)
-            {
-                const char *nz = (const char*)memchr(q, 0, end - q);
-                if (!nz)
-                    return false;
-                size_t nameLen = (size_t)(nz - (const char*)q);
-                std::string nameA((const char*)q, nameLen);
-                q = (const Byte*)(nz + 1);
-                if ((size_t)(end - q) < 4 + 4 + 4 + 4)
-                    return false;
-                UInt32 crc = ReadLE32(q); q += 4;
-                UInt32 offset = ReadLE32(q); q += 4;
-                UInt32 sizeReal = ReadLE32(q); q += 4;
-                UInt32 sizeComp = ReadLE32(q); q += 4;
-
-                std::replace(nameA.begin(), nameA.end(), '\\', '/');
-                CItem it;
-                it.IsDir = (offset == 0);
-                it.Path = MultiByteToUnicodeString(nameA.c_str(), CP_ACP);
-                TrimTrailingSlashes(it.Path);
-                if (it.Path.IsEmpty())
-                    continue;
-                it.Offset = offset;
-                it.Size = sizeReal;
-                it.PackSize = sizeComp;
-                it.Crc = crc;
-                it.UseLzhuf = false;
-                add_item(it);
-            }
-            return !parsed.IsEmpty();
-        };
-
-        auto parse_2215 = [&]() -> bool
-        {
-            const Byte *q = p;
-            while (q < end)
-            {
-                const char *nz = (const char*)memchr(q, 0, end - q);
-                if (!nz)
-                    return false;
-                size_t nameLen = (size_t)(nz - (const char*)q);
-                std::string nameA((const char*)q, nameLen);
-                q = (const Byte*)(nz + 1);
-                if ((size_t)(end - q) < 4 + 4 + 4)
-                    return false;
-                UInt32 offset = ReadLE32(q); q += 4;
-                UInt32 sizeReal = ReadLE32(q); q += 4;
-                UInt32 sizeComp = ReadLE32(q); q += 4;
-
-                std::replace(nameA.begin(), nameA.end(), '\\', '/');
-                CItem it;
-                it.IsDir = (offset == 0);
-                it.Path = MultiByteToUnicodeString(nameA.c_str(), CP_ACP);
-                TrimTrailingSlashes(it.Path);
-                if (it.Path.IsEmpty())
-                    continue;
-                it.Offset = offset;
-                it.Size = sizeReal;
-                it.PackSize = sizeComp;
-                it.Crc = 0;
-                it.UseLzhuf = false;
-                add_item(it);
-            }
-            return !parsed.IsEmpty();
-        };
-
-        auto parse_11XX = [&]() -> bool
-        {
-            const Byte *q = p;
-            while (q < end)
-            {
-                const char *nz = (const char*)memchr(q, 0, end - q);
-                if (!nz)
-                    return false;
-                size_t nameLen = (size_t)(nz - (const char*)q);
-                std::string nameA((const char*)q, nameLen);
-                q = (const Byte*)(nz + 1);
-                if ((size_t)(end - q) < 4 + 4 + 4)
-                    return false;
-                UInt32 uncompressedFlag = ReadLE32(q); q += 4;
-                UInt32 offset = ReadLE32(q); q += 4;
-                UInt32 sizeField = ReadLE32(q); q += 4;
-
-                std::replace(nameA.begin(), nameA.end(), '\\', '/');
-
-                CItem it;
-                it.IsDir = (offset == 0);
-                it.Path = MultiByteToUnicodeString(nameA.c_str(), CP_ACP);
-                TrimTrailingSlashes(it.Path);
-                if (it.Path.IsEmpty())
-                    continue;
-                it.Offset = offset;
-                it.PackSize = sizeField;
-                it.Size = (uncompressedFlag != 0) ? sizeField : 0; // unknown real size if compressed
-                it.Crc = 0;
-                it.UseLzhuf = (uncompressedFlag == 0);
-                add_item(it);
-            }
-            return !parsed.IsEmpty();
-        };
-
-        bool ok = false;
-        DBVersion detected = DBVersion::UNKNOWN;
-
-        if (parse_2947())
-        {
-            detected = candidate; // Xdb or 2947RU/WW depending on caller
-            ok = true;
-        }
-        else
-        {
-            parsed.Clear();
-            lastByPath.clear();
-            if (parse_2945())
-            {
-            detected = DBVersion::V2945;
-            ok = true;
-        }
-            else
-            {
-                parsed.Clear(); lastByPath.clear();
-                if (parse_2215())
-                {
-                    detected = DBVersion::V2215;
-                    ok = true;
-                }
-                else
-                {
-                    parsed.Clear(); lastByPath.clear();
-                    if (parse_11XX())
-                    {
-                        detected = DBVersion::V11XX;
-                        ok = true;
-                    }
-                }
+                _items = parsed;
+                _dbVersion = detected;
+                return true;
             }
         }
-
-        if (!ok || parsed.IsEmpty())
-            return false;
-
-        _items = parsed;
-        _dbVersion = detected;
-        return true;
+        return false;
     };
 
     bool parsedOk = false;
 
-    auto attempt_order = [&](const std::vector<DBVersion> &order)
-    {
-        std::vector<Byte> buf;
-        for (DBVersion v : order)
-        {
-            if (v == DBVersion::V2947RU || v == DBVersion::V2947WW)
-            {
-                if (!hdrCompressed) continue;
-                xray_re::xr_scrambler scr(v == DBVersion::V2947RU
-                    ? xray_re::xr_scrambler::CC_RU
-                    : xray_re::xr_scrambler::CC_WW);
-                buf.resize(hdrComp.size());
-                scr.decrypt(buf.data(), hdrComp.data(), hdrComp.size());
-                if (buf.size() >= 4)
-                {
-                    UInt32 expected = ReadLE32(buf.data());
-                    if (expected == 0 || expected > kHeaderMax)
-                        continue;
-                }
-                if (try_mode(buf, true, v)) { parsedOk = true; return; }
-            }
-            else
-            {
-                buf = hdrComp;
-                if (try_mode(buf, hdrCompressed, v)) { parsedOk = true; return; }
-            }
-        }
-    };
-
     if (_dbForce != DBVersion::UNKNOWN)
     {
-        attempt_order({_dbForce});
+        parsedOk = attempt_order({_dbForce});
     }
     else
     {
         if (hdrCompressed)
-            attempt_order({DBVersion::V2947WW, DBVersion::V2947RU, DBVersion::XDB, DBVersion::V2945, DBVersion::V2215, DBVersion::V11XX});
+            parsedOk = attempt_order({DBVersion::V2947WW, DBVersion::V2947RU, DBVersion::XDB, DBVersion::V2945, DBVersion::V2215, DBVersion::V11XX});
         else
-            attempt_order({DBVersion::XDB, DBVersion::V2945, DBVersion::V2215, DBVersion::V11XX});
+            parsedOk = attempt_order({DBVersion::XDB, DBVersion::V2945, DBVersion::V2215, DBVersion::V11XX});
     }
 
     if (!parsedOk)
