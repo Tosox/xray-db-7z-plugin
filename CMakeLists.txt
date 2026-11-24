@@ -22,6 +22,8 @@ endforeach()
 # --- Plugin sources ---------------------------------------------------------
 
 set(XDB_SOURCES
+  ${XDB_DIR}/XdbLzhuf.cpp
+  ${XDB_DIR}/XdbScrambler.cpp
 )
 
 # The pre-rewrite handler and the reference xray_re-tools code it uses.

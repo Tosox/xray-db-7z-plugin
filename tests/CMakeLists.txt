@@ -11,6 +11,9 @@ FetchContent_MakeAvailable(googletest)
 
 add_executable(xdb_tests
   InitGuid.cpp
+  LzhufTest.cpp
+  LzoTest.cpp
+  ScramblerTest.cpp
   SmokeTest.cpp
 )
 
