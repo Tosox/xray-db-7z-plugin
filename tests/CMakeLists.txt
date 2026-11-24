@@ -33,6 +33,7 @@ add_executable(xdb_tests
   RealArchivesTest.cpp
   ScramblerTest.cpp
   SmokeTest.cpp
+  UpdateTest.cpp
   ${Z7_ROOT}/CPP/7zip/Common/FileStreams.cpp
 )
 

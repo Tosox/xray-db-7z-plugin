@@ -4,18 +4,31 @@
 #include "StdAfx.h"
 
 #include "Common/ComTry.h"
+#include "Common/Defs.h"
 #include "Common/StringConvert.h"
 #include "Windows/FileIO.h"
+#include "Windows/PropVariant.h"
 
 #include "7zip/Common/MethodProps.h"
 
 #include "XdbHandler.h"
+#include "XdbUpdate.h"
 
 namespace NArchive {
 namespace NXdb {
 
 // A userdata file larger than this is certainly a mistake.
 static const UInt64 kMaxUserDataFileSize = (UInt64)1 << 24;
+
+// Written to new xdb archives when no userdata is given (gen_xdb_ud).
+static const char kGeneratedUserData[] =
+    "[header]\n"
+    "auto_load = true\n"
+    "level_name = stalker\n"
+    "level_ver = 1.0\n"
+    "entry_point = $fs_root$\\gamedata\\\n"
+    "creator = \"Modder\"\n"
+    "link = \"https://github.com/Tosox/xray-db-7z-plugin\"\n";
 
 void COptions::Init()
 {
@@ -209,10 +222,193 @@ Z7_COM7F_IMF(CHandler::GetFileTimeType(UInt32 *type))
   return S_OK;
 }
 
-Z7_COM7F_IMF(CHandler::UpdateItems(ISequentialOutStream * /* outStream */, UInt32 /* numItems */,
-    IArchiveUpdateCallback * /* callback */))
+static HRESULT GetPathProp(IArchiveUpdateCallback *callback, UInt32 index, UString &path)
 {
-  return E_NOTIMPL;
+  NWindows::NCOM::CPropVariant prop;
+  RINOK(callback->GetProperty(index, kpidPath, &prop))
+  if (prop.vt != VT_BSTR)
+    return E_INVALIDARG;
+  path = prop.bstrVal;
+  return S_OK;
+}
+
+static HRESULT GetIsDirProp(IArchiveUpdateCallback *callback, UInt32 index, bool &isDir)
+{
+  NWindows::NCOM::CPropVariant prop;
+  RINOK(callback->GetProperty(index, kpidIsDir, &prop))
+  if (prop.vt == VT_EMPTY)
+    isDir = false;
+  else if (prop.vt == VT_BOOL)
+    isDir = (prop.boolVal != VARIANT_FALSE);
+  else
+    return E_INVALIDARG;
+  return S_OK;
+}
+
+static HRESULT GetSizeProp(IArchiveUpdateCallback *callback, UInt32 index, UInt64 &size)
+{
+  NWindows::NCOM::CPropVariant prop;
+  RINOK(callback->GetProperty(index, kpidSize, &prop))
+  if (prop.vt == VT_EMPTY)
+    size = 0;
+  else if (prop.vt == VT_UI8)
+    size = prop.uhVal.QuadPart;
+  else
+    return E_INVALIDARG;
+  return S_OK;
+}
+
+static HRESULT ReadUserDataItem(IArchiveUpdateCallback *callback, UInt32 index, CByteBuffer &userData)
+{
+  CMyComPtr<ISequentialInStream> stream;
+  RINOK(callback->GetStream(index, &stream))
+  size_t size = 0;
+  CByteBuffer buf;
+  if (stream)
+  {
+    RINOK(ReadStreamToBuffer(stream, 0, buf, size))
+    if (size > kMaxUserDataFileSize)
+      return E_INVALIDARG;
+  }
+  userData.CopyFrom(buf, size);
+  return callback->SetOperationResult(NUpdate::NOperationResult::kOK);
+}
+
+// "compress=auto" follows the archive being updated.
+static bool MostFilesAreCompressed(const CObjectVector<CItem> &items)
+{
+  unsigned numCompressed = 0;
+  unsigned numStored = 0;
+  FOR_VECTOR (i, items)
+  {
+    if (items[i].IsDir)
+      continue;
+    if (items[i].Method == kMethod_Store)
+      numStored++;
+    else
+      numCompressed++;
+  }
+  return (numCompressed == 0 && numStored == 0) || numCompressed > numStored;
+}
+
+Z7_COM7F_IMF(CHandler::UpdateItems(ISequentialOutStream *outStream, UInt32 numItems,
+    IArchiveUpdateCallback *callback))
+{
+  COM_TRY_BEGIN
+  // A damaged file table can't be rewritten without losing files.
+  if (_isOpen && _arc.HeadersError)
+    return E_NOTIMPL;
+
+  CUpdateOptions options;
+  options.Version = _options.VersionDefined ? _options.Version : (_isOpen ? _arc.Version : kVersion_Xdb);
+  options.KeepDuplicates = _options.KeepDuplicates;
+  switch (_options.CompressMode)
+  {
+    case kCompressMode_Always: options.Compress = true; break;
+    case kCompressMode_Never:  options.Compress = false; break;
+    case kCompressMode_Auto:   options.Compress = !_isOpen || MostFilesAreCompressed(_arc.Items); break;
+  }
+  const bool isXdb = (options.Version == kVersion_Xdb);
+
+  CObjectVector<CUpdateItem> updateItems;
+  bool userDataInList = false;
+  CByteBuffer userDataFromList;
+
+  for (UInt32 i = 0; i < numItems; i++)
+  {
+    Int32 newData;
+    Int32 newProps;
+    UInt32 indexInArc;
+    RINOK(callback->GetUpdateItemInfo(i, &newData, &newProps, &indexInArc))
+
+    CUpdateItem ui;
+    ui.IndexInClient = i;
+    ui.NewData = IntToBool(newData);
+    const bool inArc = (indexInArc != (UInt32)(Int32)-1);
+    const bool fromUserDataItem = inArc && IsUserDataItem(indexInArc);
+    if (inArc && !fromUserDataItem)
+    {
+      if (indexInArc >= _arc.Items.Size())
+        return E_INVALIDARG;
+      ui.IndexInArc = (int)indexInArc;
+    }
+
+    UString path;
+    if (IntToBool(newProps) || !inArc)
+    {
+      RINOK(GetPathProp(callback, i, path))
+      RINOK(GetIsDirProp(callback, i, ui.IsDir))
+    }
+    else if (fromUserDataItem)
+      path = kUserDataItemName;
+    else
+    {
+      const CItem &item = _arc.Items[indexInArc];
+      ui.Name = item.Name;
+      ui.IsDir = item.IsDir;
+    }
+
+    // In an xdb archive, the userdata file is the userdata chunk.
+    if (isXdb && !ui.IsDir && (ui.NewData || fromUserDataItem) && path.IsEqualTo_Ascii_NoCase(kUserDataItemName))
+    {
+      userDataInList = true;
+      if (ui.NewData)
+      {
+        RINOK(ReadUserDataItem(callback, i, userDataFromList))
+      }
+      else
+        userDataFromList = _arc.UserData;
+      continue;
+    }
+
+    if (fromUserDataItem)
+    {
+      // Without new contents there is nothing to store under another name,
+      // and other versions have no userdata.
+      if (!ui.NewData || !isXdb)
+        continue;
+    }
+
+    if (ui.Name.IsEmpty() && !PathToItemName(path, ui.Name))
+      return E_INVALIDARG;
+    if (ui.NewData && !ui.IsDir)
+    {
+      RINOK(GetSizeProp(callback, i, ui.Size))
+    }
+    updateItems.Add(ui);
+  }
+
+  if (isXdb)
+  {
+    if (_options.UserDataDefined)
+    {
+      options.WriteUserData = true;
+      options.UserData = _options.UserData;
+    }
+    else if (userDataInList)
+    {
+      options.WriteUserData = true;
+      options.UserData = userDataFromList;
+    }
+    else if (_isOpen && _arc.Version == kVersion_Xdb)
+    {
+      // A shown userdata file that isn't in the list was deleted. Userdata
+      // that couldn't be shown (a real file has its name) is kept.
+      if (_arc.UserDataDefined && !_showUserDataItem)
+      {
+        options.WriteUserData = true;
+        options.UserData = _arc.UserData;
+      }
+    }
+    else if (_options.GenerateUserData)
+    {
+      options.WriteUserData = true;
+      options.UserData.CopyFrom((const Byte *)kGeneratedUserData, sizeof(kGeneratedUserData) - 1);
+    }
+  }
+
+  return UpdateArchive(_stream, _arc.Items, updateItems, options, outStream, callback);
+  COM_TRY_END
 }
 
 } // namespace NXdb

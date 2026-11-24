@@ -6,6 +6,7 @@
 
 #include "Common/MyString.h"
 #include "Common/MyTypes.h"
+#include "Common/MyVector.h"
 
 #include "XdbScrambler.h"
 
@@ -103,6 +104,29 @@ struct CItem
   Returns false if the path is empty or has characters that CP1251 lacks.
 */
 bool PathToItemName(const UString &path, AString &name);
+
+/*
+  Finds names that occur more than once (ASCII case-insensitively). Of each
+  group, the last entry is kept, at the position of the first. (sources[i])
+  is the index of the entry that belongs at position i, or -1 to drop it.
+*/
+void FindDuplicateNames(const AStringVector &names, CIntVector &sources);
+
+// Applies FindDuplicateNames() to anything with an AString Name.
+template <class T>
+void RemoveDuplicateNames(CObjectVector<T> &items)
+{
+  AStringVector names;
+  FOR_VECTOR (i, items)
+    names.Add(items[i].Name);
+  CIntVector sources;
+  FindDuplicateNames(names, sources);
+  CObjectVector<T> result;
+  FOR_VECTOR (i, items)
+    if (sources[i] >= 0)
+      result.Add(items[(unsigned)sources[i]]);
+  items = result;
+}
 
 } // namespace NXdb
 } // namespace NArchive

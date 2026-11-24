@@ -56,10 +56,6 @@ public:
   HRESULT Open(IInStream *stream, const EVersion *forcedVersion, IArchiveOpenCallback *callback);
 };
 
-// Of several items with the same name (ASCII case-insensitively), keeps the
-// last one, at the position of the first.
-void RemoveDuplicateItems(CObjectVector<CItem> &items);
-
 } // namespace NXdb
 } // namespace NArchive
 

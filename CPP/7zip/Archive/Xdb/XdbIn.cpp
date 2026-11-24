@@ -2,8 +2,6 @@
 
 #include "StdAfx.h"
 
-#include <string.h>
-
 #include "CpuArch.h"
 
 #include "7zip/Common/StreamUtils.h"
@@ -226,55 +224,6 @@ HRESULT CInArchive::Open(IInStream *stream, const EVersion *forcedVersion, IArch
     RINOK(callback->SetCompleted(&numFiles, &fileSize))
   }
   return S_OK;
-}
-
-
-static int CompareIndicesByName(const unsigned *a, const unsigned *b, void *param)
-{
-  const CObjectVector<AString> &names = *(const CObjectVector<AString> *)param;
-  const int res = strcmp(names[*a], names[*b]);
-  if (res != 0)
-    return res;
-  return MyCompare(*a, *b);
-}
-
-void RemoveDuplicateItems(CObjectVector<CItem> &items)
-{
-  CObjectVector<AString> names;
-  CUIntVector order;
-  FOR_VECTOR (i, items)
-  {
-    AString &name = names.AddNew();
-    name = items[i].Name;
-    name.MakeLower_Ascii();
-    order.Add(i);
-  }
-  order.Sort(CompareIndicesByName, &names);
-
-  CBoolVector keep;
-  keep.ClearAndSetSize(items.Size());
-  FOR_VECTOR (i, keep)
-    keep[i] = true;
-
-  for (unsigned i = 0; i < order.Size();)
-  {
-    unsigned end = i + 1;
-    while (end < order.Size() && names[order[end]] == names[order[i]])
-      end++;
-    if (end - i > 1)
-    {
-      items[order[i]] = items[order[end - 1]];
-      for (unsigned k = i + 1; k < end; k++)
-        keep[order[k]] = false;
-    }
-    i = end;
-  }
-
-  CObjectVector<CItem> result;
-  FOR_VECTOR (i, items)
-    if (keep[i])
-      result.Add(items[i]);
-  items = result;
 }
 
 } // namespace NXdb

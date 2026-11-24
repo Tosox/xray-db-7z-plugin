@@ -152,7 +152,7 @@ TEST(InArchive, RejectsOffsetsOutsideTheDataChunk)
   EXPECT_TRUE(arc.HeadersError);
 }
 
-TEST(InArchive, RemoveDuplicateItemsKeepsLastAtFirstPosition)
+TEST(InArchive, RemoveDuplicateNamesKeepsLastAtFirstPosition)
 {
   CObjectVector<CItem> items;
   const char *names[] = { "a", "B", "c", "b", "A" };
@@ -162,7 +162,7 @@ TEST(InArchive, RemoveDuplicateItemsKeepsLastAtFirstPosition)
     item.Name = names[i];
     item.Size = i;
   }
-  RemoveDuplicateItems(items);
+  RemoveDuplicateNames(items);
   ASSERT_EQ(items.Size(), 3u);
   EXPECT_STREQ(items[0].Name, "A");
   EXPECT_EQ(items[0].Size, 4u);

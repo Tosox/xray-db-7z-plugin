@@ -29,7 +29,9 @@ set(XDB_SOURCES
   ${XDB_DIR}/XdbHeader.cpp
   ${XDB_DIR}/XdbIn.cpp
   ${XDB_DIR}/XdbLzhuf.cpp
+  ${XDB_DIR}/XdbOut.cpp
   ${XDB_DIR}/XdbScrambler.cpp
+  ${XDB_DIR}/XdbUpdate.cpp
 )
 
 # --- 7-Zip sources the handler needs ----------------------------------------

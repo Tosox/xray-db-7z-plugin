@@ -17,6 +17,7 @@
 
 #include "XdbIn.h"
 
+#include "TestArchive.h"
 #include "TestCallbacks.h"
 
 using namespace NArchive;
@@ -106,6 +107,47 @@ TEST_F(RealArchives, EveryFilePassesItsCrc)
     EXPECT_EQ(numErrors, 0u);
     printf("  %6u files, %llu bytes checked  %s\n", (unsigned)spec->Results.Results.size(),
         (unsigned long long)spec->Results.Total, path.c_str());
+  }
+}
+
+// Rewriting an archive without changes keeps every name, size and CRC.
+TEST_F(RealArchives, RewriteKeepsEverything)
+{
+  for (const std::string &path : Paths)
+  {
+    SCOPED_TRACE(path);
+    CMyComPtr<IInStream> stream = OpenFile(path);
+    CInArchive original;
+    ASSERT_EQ(original.Open(stream, nullptr, nullptr), S_OK);
+
+    // Some archives contain duplicate names; keep them all, on open and on update.
+    const CProps keepDuplicates = { { L"keepdups", NWindows::NCOM::CPropVariant(L"on") } };
+    CMyComPtr<IInArchive> handler = CreateHandler();
+    ASSERT_EQ(SetProps(handler, keepDuplicates), S_OK);
+    ASSERT_EQ(handler->Open(OpenFile(path), nullptr, nullptr), S_OK);
+    UInt32 numItems = 0;
+    handler->GetNumberOfItems(&numItems);
+    std::vector<CUpdateEntry> entries;
+    for (UInt32 i = 0; i < numItems; i++)
+      entries.push_back(Keep((Int32)i));
+    CBytes bytes;
+    ASSERT_EQ(RunUpdate(handler, entries, bytes, keepDuplicates), S_OK);
+
+    CInArchive rewritten;
+    ASSERT_EQ(rewritten.Open(MakeInStream(bytes), nullptr, nullptr), S_OK);
+    EXPECT_EQ(rewritten.Version, original.Version);
+    EXPECT_EQ(rewritten.UserDataDefined, original.UserDataDefined);
+    ASSERT_EQ(rewritten.Items.Size(), original.Items.Size());
+    for (unsigned i = 0; i < original.Items.Size(); i++)
+    {
+      const CItem &a = rewritten.Items[i];
+      const CItem &b = original.Items[i];
+      EXPECT_STREQ(a.Name, b.Name);
+      EXPECT_EQ(a.IsDir, b.IsDir);
+      EXPECT_EQ(a.Size, b.Size);
+      EXPECT_EQ(a.PackSize, b.PackSize);
+      EXPECT_EQ(a.Crc, b.Crc);
+    }
   }
 }
 
