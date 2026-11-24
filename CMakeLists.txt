@@ -24,6 +24,7 @@ endforeach()
 set(XDB_SOURCES
   ${XDB_DIR}/XdbFormat.cpp
   ${XDB_DIR}/XdbHeader.cpp
+  ${XDB_DIR}/XdbIn.cpp
   ${XDB_DIR}/XdbLzhuf.cpp
   ${XDB_DIR}/XdbScrambler.cpp
 )

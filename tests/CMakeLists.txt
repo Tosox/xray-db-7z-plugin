@@ -11,11 +11,14 @@ FetchContent_MakeAvailable(googletest)
 
 add_executable(xdb_tests
   HeaderTest.cpp
+  InArchiveTest.cpp
   InitGuid.cpp
   LzhufTest.cpp
   LzoTest.cpp
+  RealArchivesTest.cpp
   ScramblerTest.cpp
   SmokeTest.cpp
+  ${Z7_ROOT}/CPP/7zip/Common/FileStreams.cpp
 )
 
 target_link_libraries(xdb_tests PRIVATE xdb_core GTest::gtest_main)
