@@ -4,6 +4,8 @@
 
 #include "CpuArch.h"
 
+#include "Windows/PropVariant.h"
+
 #include "7zip/Common/RegisterArc.h"
 
 #include "XdbHandler.h"
@@ -60,5 +62,44 @@ REGISTER_ARC_IO(
     0,
     IsArc_Xdb)
 
+/*
+  Describes the properties of SetProperties() for the Tosox/7zip fork, which
+  shows them as controls in the "Add to Archive" dialog. See DOC/format-options.md
+  in https://github.com/Tosox/7zip. Stock 7-Zip never calls this.
+*/
+static const char k_FormatOptions[] =
+    "version=1\n"
+    "[dbver]\n"
+    "type=enum\n"
+    "values=auto|xdb|2947ww|2947ru|2945|2215|11xx\n"
+    "labels=Auto|xdb (Clear Sky, Call of Pripyat, mods)|2947ww (Shadow of Chernobyl)"
+        "|2947ru (Shadow of Chernobyl, Russian)|2945|2215|11xx\n"
+    "label=DB version\n"
+    "tip=Auto keeps the version of an existing archive and uses xdb for new ones\n"
+    "[compress]\n"
+    "type=enum\n"
+    "values=auto|on|off\n"
+    "labels=Auto|Always|Never\n"
+    "label=Compression\n"
+    "tip=Auto follows the archive being updated; new archives are compressed\n"
+    "[xdb_ud]\n"
+    "type=file\n"
+    "label=Userdata file\n"
+    "filter=LTX files|*.ltx\n"
+    "tip=Its contents become the userdata block of an xdb archive\n"
+    "[gen_xdb_ud]\n"
+    "type=bool\n"
+    "default=on\n"
+    "label=Generate userdata for new xdb archives\n";
+
 } // namespace NXdb
 } // namespace NArchive
+
+STDAPI GetFormatOptions(UInt32 formatIndex, PROPVARIANT *value)
+{
+  NWindows::NCOM::CPropVariant prop;
+  if (formatIndex == 0)
+    prop = NArchive::NXdb::k_FormatOptions;
+  prop.Detach(value);
+  return S_OK;
+}

@@ -3,6 +3,8 @@
 
 #include <windows.h>
 
+#include <string>
+
 #include <gtest/gtest.h>
 
 #include "7zCrc.h"
@@ -51,6 +53,24 @@ TEST_F(PluginDll, ExportsArchiveEntryPoints)
 {
   for (const char *name : { "CreateObject", "GetHandlerProperty2", "GetIsArc" })
     EXPECT_NE(Get(name), nullptr) << name;
+}
+
+// Read by the Tosox/7zip fork; the name must be undecorated, also on Win32.
+TEST_F(PluginDll, ExportsFormatOptions)
+{
+  typedef HRESULT (WINAPI *Func_GetFormatOptions)(UInt32 formatIndex, PROPVARIANT *value);
+  const auto getFormatOptions = reinterpret_cast<Func_GetFormatOptions>(Get("GetFormatOptions"));
+  ASSERT_NE(getFormatOptions, nullptr);
+
+  PROPVARIANT value;
+  value.vt = VT_EMPTY;
+  ASSERT_EQ(getFormatOptions(0, &value), S_OK);
+  ASSERT_EQ(value.vt, VT_BSTR);
+  const std::wstring schema = value.bstrVal;
+  SysFreeString(value.bstrVal);
+  EXPECT_EQ(schema.rfind(L"version=1\n", 0), 0u);
+  for (const wchar_t *option : { L"[dbver]", L"[compress]", L"[xdb_ud]", L"[gen_xdb_ud]" })
+    EXPECT_NE(schema.find(option), std::wstring::npos) << option;
 }
 
 } // namespace

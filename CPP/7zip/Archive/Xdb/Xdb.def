@@ -24,3 +24,5 @@ EXPORTS
   SetCaseSensitive PRIVATE
 
   GetModuleProp PRIVATE
+
+  GetFormatOptions PRIVATE

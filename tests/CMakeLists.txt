@@ -31,6 +31,7 @@ add_executable(xdb_tests
   LzhufTest.cpp
   LzoTest.cpp
   RealArchivesTest.cpp
+  RobustnessTest.cpp
   ScramblerTest.cpp
   SmokeTest.cpp
   UpdateTest.cpp
