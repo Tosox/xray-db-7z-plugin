@@ -9,7 +9,22 @@ set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
 set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
+# Reference implementations from xray_re-tools, used only to check that the
+# plugin's codecs are compatible with them.
+add_library(xray_re_reference STATIC
+  ReferenceSupport.cpp
+  ${XRAY_RE_ROOT}/sources/utils/converter/lzo/minilzo.c
+  ${XRAY_RE_ROOT}/sources/xray_re/xr_lzhuf.cxx
+  ${XRAY_RE_ROOT}/sources/xray_re/xr_scrambler.cxx
+)
+target_include_directories(xray_re_reference PUBLIC
+  ${XRAY_RE_ROOT}/sources/utils/converter/lzo
+  ${XRAY_RE_ROOT}/sources/xray_re
+)
+target_compile_definitions(xray_re_reference PRIVATE _CRT_SECURE_NO_WARNINGS)
+
 add_executable(xdb_tests
+  HandlerTest.cpp
   HeaderTest.cpp
   InArchiveTest.cpp
   InitGuid.cpp
@@ -21,7 +36,7 @@ add_executable(xdb_tests
   ${Z7_ROOT}/CPP/7zip/Common/FileStreams.cpp
 )
 
-target_link_libraries(xdb_tests PRIVATE xdb_core GTest::gtest_main)
+target_link_libraries(xdb_tests PRIVATE xdb_core xray_re_reference GTest::gtest_main)
 
 # The smoke test loads the real plugin DLL.
 add_dependencies(xdb_tests Xdb)

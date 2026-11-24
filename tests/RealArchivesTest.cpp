@@ -17,7 +17,11 @@
 
 #include "XdbIn.h"
 
+#include "TestCallbacks.h"
+
+using namespace NArchive;
 using namespace NArchive::NXdb;
+using namespace NXdbTest;
 
 namespace {
 
@@ -80,6 +84,28 @@ TEST_F(RealArchives, OpenWithoutErrors)
       if (arc.Items[i].IsDir)
         numDirs++;
     printf("  %-8s %6u items (%u dirs)  %s\n", GetVersionInfo(arc.Version).Name, arc.Items.Size(), numDirs, path.c_str());
+  }
+}
+
+TEST_F(RealArchives, EveryFilePassesItsCrc)
+{
+  for (const std::string &path : Paths)
+  {
+    SCOPED_TRACE(path);
+    CMyComPtr<IInArchive> handler = CreateHandler();
+    ASSERT_EQ(handler->Open(OpenFile(path), nullptr, nullptr), S_OK);
+
+    CExtractCallback *spec = new CExtractCallback;
+    CMyComPtr<IArchiveExtractCallback> callback = spec;
+    ASSERT_EQ(handler->Extract(nullptr, (UInt32)(Int32)-1, 1, callback), S_OK);
+
+    UInt32 numErrors = 0;
+    for (const auto &result : spec->Results.Results)
+      if (result.second != NExtract::NOperationResult::kOK)
+        numErrors++;
+    EXPECT_EQ(numErrors, 0u);
+    printf("  %6u files, %llu bytes checked  %s\n", (unsigned)spec->Results.Results.size(),
+        (unsigned long long)spec->Results.Total, path.c_str());
   }
 }
 

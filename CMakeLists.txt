@@ -22,20 +22,14 @@ endforeach()
 # --- Plugin sources ---------------------------------------------------------
 
 set(XDB_SOURCES
+  ${XDB_DIR}/XdbCodec.cpp
   ${XDB_DIR}/XdbFormat.cpp
+  ${XDB_DIR}/XdbHandler.cpp
+  ${XDB_DIR}/XdbHandlerOut.cpp
   ${XDB_DIR}/XdbHeader.cpp
   ${XDB_DIR}/XdbIn.cpp
   ${XDB_DIR}/XdbLzhuf.cpp
   ${XDB_DIR}/XdbScrambler.cpp
-)
-
-# The pre-rewrite handler and the reference xray_re-tools code it uses.
-# Removed once the new handler is complete.
-set(LEGACY_SOURCES
-  ${XDB_DIR}/XdbHandler.cpp
-  ${XRAY_RE_ROOT}/sources/utils/converter/lzo/minilzo.c
-  ${XRAY_RE_ROOT}/sources/xray_re/xr_lzhuf.cxx
-  ${XRAY_RE_ROOT}/sources/xray_re/xr_scrambler.cxx
 )
 
 # --- 7-Zip sources the handler needs ----------------------------------------
@@ -106,7 +100,6 @@ set(Z7_SOURCES
 
 add_library(xdb_core OBJECT
   ${XDB_SOURCES}
-  ${LEGACY_SOURCES}
   ${Z7_SOURCES}
   ${LZOKAY_ROOT}/lzokay.cpp
 )
@@ -114,8 +107,6 @@ add_library(xdb_core OBJECT
 target_include_directories(xdb_core PUBLIC
   ${XDB_DIR}
   ${LZOKAY_ROOT}
-  ${XRAY_RE_ROOT}/sources/utils/converter/lzo
-  ${XRAY_RE_ROOT}/sources/xray_re
   ${Z7_ROOT}/CPP
   ${Z7_ROOT}/CPP/7zip
   ${Z7_ROOT}/C
