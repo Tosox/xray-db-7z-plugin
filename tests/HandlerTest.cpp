@@ -195,13 +195,15 @@ TEST(Handler, RemovesDuplicatesUnlessKeepdups)
   EXPECT_EQ(arc.NumItems(), files.size());
 }
 
-TEST(Handler, OpensWithForcedVersion)
+// The command line also passes -m properties when it opens the archive to
+// update. "dbver" names the version to write, so it must not affect reading.
+TEST(Handler, DbverDoesNotAffectReading)
 {
   const CBytes bytes = BuildArchive(kVersion_2215, MakeSampleFiles());
   COpenedArchive arc;
-  // 7-Zip passes "2215" as a number.
-  ASSERT_EQ(arc.Open(bytes, { { L"dbver", NWindows::NCOM::CPropVariant((UInt32)2215) } }), S_OK);
+  ASSERT_EQ(arc.Open(bytes, { { L"dbver", NWindows::NCOM::CPropVariant(L"xdb") } }), S_OK);
   EXPECT_EQ(GetArcStringProp(arc.Handler, kpidUserDefined + 1), UString(L"2215"));
+  EXPECT_EQ(arc.NumItems(), MakeSampleFiles().size());
 }
 
 

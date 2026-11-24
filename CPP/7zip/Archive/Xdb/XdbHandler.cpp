@@ -150,7 +150,7 @@ Z7_COM7F_IMF(CHandler::Open(IInStream *stream, const UInt64 * /* maxCheckStartPo
 {
   COM_TRY_BEGIN
   Close();
-  RINOK(_arc.Open(stream, _options.VersionDefined ? &_options.Version : NULL, callback))
+  RINOK(_arc.Open(stream, callback))
   if (!_options.KeepDuplicates)
     RemoveDuplicateNames(_arc.Items);
   _showUserDataItem = _arc.Version == kVersion_Xdb

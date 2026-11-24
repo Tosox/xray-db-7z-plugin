@@ -14,9 +14,9 @@ const EVersion kAllVersions[] =
   kVersion_11xx, kVersion_2215, kVersion_2945, kVersion_2947ru, kVersion_2947ww, kVersion_Xdb
 };
 
-HRESULT Open(CInArchive &arc, const CBytes &bytes, const EVersion *forcedVersion = nullptr)
+HRESULT Open(CInArchive &arc, const CBytes &bytes)
 {
-  return arc.Open(MakeInStream(bytes), forcedVersion, nullptr);
+  return arc.Open(MakeInStream(bytes), nullptr);
 }
 
 TEST(InArchive, DetectsEveryVersion)
@@ -88,21 +88,6 @@ TEST(InArchive, EmptyArchiveIsXdb)
   ASSERT_EQ(Open(arc, BuildArchive(kVersion_2215, {})), S_OK);
   EXPECT_FALSE(arc.HeadersError);
   EXPECT_EQ(arc.Version, kVersion_Xdb);
-  EXPECT_EQ(arc.Items.Size(), 0u);
-}
-
-TEST(InArchive, ForcedVersion)
-{
-  const CBytes bytes = BuildArchive(kVersion_2945, MakeSampleFiles());
-  CInArchive arc;
-
-  const EVersion right = kVersion_2945;
-  ASSERT_EQ(Open(arc, bytes, &right), S_OK);
-  EXPECT_FALSE(arc.HeadersError);
-
-  const EVersion wrong = kVersion_2215;
-  ASSERT_EQ(Open(arc, bytes, &wrong), S_OK);
-  EXPECT_TRUE(arc.HeadersError);
   EXPECT_EQ(arc.Items.Size(), 0u);
 }
 

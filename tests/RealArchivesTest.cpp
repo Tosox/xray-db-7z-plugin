@@ -77,7 +77,7 @@ TEST_F(RealArchives, OpenWithoutErrors)
     CMyComPtr<IInStream> stream = OpenFile(path);
     ASSERT_TRUE(stream) << "cannot open the file";
     CInArchive arc;
-    ASSERT_EQ(arc.Open(stream, nullptr, nullptr), S_OK);
+    ASSERT_EQ(arc.Open(stream, nullptr), S_OK);
     EXPECT_FALSE(arc.HeadersError);
     EXPECT_GT(arc.Items.Size(), 0u);
     unsigned numDirs = 0;
@@ -118,7 +118,7 @@ TEST_F(RealArchives, RewriteKeepsEverything)
     SCOPED_TRACE(path);
     CMyComPtr<IInStream> stream = OpenFile(path);
     CInArchive original;
-    ASSERT_EQ(original.Open(stream, nullptr, nullptr), S_OK);
+    ASSERT_EQ(original.Open(stream, nullptr), S_OK);
 
     // Some archives contain duplicate names; keep them all, on open and on update.
     const CProps keepDuplicates = { { L"keepdups", NWindows::NCOM::CPropVariant(L"on") } };
@@ -134,7 +134,7 @@ TEST_F(RealArchives, RewriteKeepsEverything)
     ASSERT_EQ(RunUpdate(handler, entries, bytes, keepDuplicates), S_OK);
 
     CInArchive rewritten;
-    ASSERT_EQ(rewritten.Open(MakeInStream(bytes), nullptr, nullptr), S_OK);
+    ASSERT_EQ(rewritten.Open(MakeInStream(bytes), nullptr), S_OK);
     EXPECT_EQ(rewritten.Version, original.Version);
     EXPECT_EQ(rewritten.UserDataDefined, original.UserDataDefined);
     ASSERT_EQ(rewritten.Items.Size(), original.Items.Size());

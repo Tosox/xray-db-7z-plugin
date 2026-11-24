@@ -36,7 +36,7 @@ std::vector<CUpdateEntry> MakeNewEntries()
 CInArchive ReadArchive(const CBytes &bytes)
 {
   CInArchive arc;
-  EXPECT_EQ(arc.Open(MakeInStream(bytes), nullptr, nullptr), S_OK);
+  EXPECT_EQ(arc.Open(MakeInStream(bytes), nullptr), S_OK);
   EXPECT_FALSE(arc.HeadersError);
   return arc;
 }

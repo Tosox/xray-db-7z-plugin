@@ -89,7 +89,7 @@ HRESULT CInArchive::ReadChunks(IInStream *stream, UInt64 fileSize)
   return (_data.Found && _header.Found) ? S_OK : S_FALSE;
 }
 
-bool CInArchive::DecodeHeader(const CByteBuffer &payload, bool isCompressed, const EVersion *forcedVersion)
+bool CInArchive::DecodeHeader(const CByteBuffer &payload, bool isCompressed)
 {
   const UInt64 dataBegin = _data.Pos;
   const UInt64 dataEnd = _data.Pos + _data.Size;
@@ -102,8 +102,6 @@ bool CInArchive::DecodeHeader(const CByteBuffer &payload, bool isCompressed, con
   for (unsigned i = 0; i < Z7_ARRAY_SIZE(kCandidates); i++)
   {
     const EVersion version = kCandidates[i];
-    if (forcedVersion && version != *forcedVersion)
-      continue;
     const CVersionInfo &info = GetVersionInfo(version);
 
     CByteBuffer scrambledTable;
@@ -182,7 +180,7 @@ HRESULT CInArchive::ReadUserData(IInStream *stream)
   return S_OK;
 }
 
-HRESULT CInArchive::Open(IInStream *stream, const EVersion *forcedVersion, IArchiveOpenCallback *callback)
+HRESULT CInArchive::Open(IInStream *stream, IArchiveOpenCallback *callback)
 {
   Clear();
 
@@ -207,7 +205,7 @@ HRESULT CInArchive::Open(IInStream *stream, const EVersion *forcedVersion, IArch
     RINOK(InStream_SeekSet(stream, _header.Pos))
     RINOK(ReadStream_FALSE(stream, payload, payload.Size()))
     const bool isCompressed = (_header.Id & NChunkId::kCompressedFlag) != 0;
-    if (!DecodeHeader(payload, isCompressed, forcedVersion))
+    if (!DecodeHeader(payload, isCompressed))
       HeadersError = true;
   }
 

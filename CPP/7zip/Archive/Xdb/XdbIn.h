@@ -17,7 +17,7 @@ namespace NXdb {
 class CInArchive
 {
   HRESULT ReadChunks(IInStream *stream, UInt64 fileSize);
-  bool DecodeHeader(const CByteBuffer &payload, bool isCompressed, const EVersion *forcedVersion);
+  bool DecodeHeader(const CByteBuffer &payload, bool isCompressed);
   HRESULT ReadLzhufSizes(IInStream *stream, IArchiveOpenCallback *callback);
   HRESULT ReadUserData(IInStream *stream);
 
@@ -51,9 +51,8 @@ public:
   /*
     Returns S_FALSE if the stream is not a DB archive. A damaged file table
     still opens (S_OK) with HeadersError set and no items.
-    With (forcedVersion), only that version is tried.
   */
-  HRESULT Open(IInStream *stream, const EVersion *forcedVersion, IArchiveOpenCallback *callback);
+  HRESULT Open(IInStream *stream, IArchiveOpenCallback *callback);
 };
 
 } // namespace NXdb

@@ -24,7 +24,7 @@ enum ECompressMode
 // Settings from ISetProperties: see README.md and GetFormatOptions() in XdbRegister.cpp.
 struct COptions
 {
-  bool VersionDefined;       // "dbver"; otherwise the opened archive's version, or xdb
+  bool VersionDefined;       // "dbver": the version to write; otherwise the opened archive's, or xdb
   EVersion Version;
   ECompressMode CompressMode; // "compress"
   bool KeepDuplicates;       // "keepdups"
