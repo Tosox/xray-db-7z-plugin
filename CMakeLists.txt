@@ -1,42 +1,56 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.21)
 project(xdb_plugin LANGUAGES C CXX)
 
-set(ROOT ${CMAKE_CURRENT_LIST_DIR})
-set(Z7_ROOT ${ROOT}/third_party/7zip)
+option(XDB_BUILD_TESTS "Build the unit tests" ON)
 
-if (NOT EXISTS "${Z7_ROOT}/CPP/7zip/Archive/IArchive.h")
-  message(FATAL_ERROR "third_party/7zip is missing. Run:\n  git submodule update --init --recursive")
-endif()
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# Static CRT, so users don't need the Visual C++ redistributable.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-set(SRC_XDB
-  ${ROOT}/CPP/7zip/Archive/Xdb/XdbHandler.cpp
-  ${ROOT}/CPP/7zip/Archive/Xdb/XdbRegister.cpp
-  ${ROOT}/third_party/xray_re-tools/sources/utils/converter/lzo/minilzo.c
-  ${ROOT}/third_party/xray_re-tools/sources/xray_re/xr_lzhuf.cxx
-  ${ROOT}/third_party/xray_re-tools/sources/xray_re/xr_scrambler.cxx
-  ${Z7_ROOT}/CPP/7zip/Archive/ArchiveExports.cpp
-  ${Z7_ROOT}/CPP/7zip/Archive/DllExports2.cpp
+set(Z7_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/third_party/7zip)
+set(LZOKAY_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/third_party/lzokay)
+set(XRAY_RE_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/third_party/xray_re-tools)
+set(XDB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/CPP/7zip/Archive/Xdb)
+
+foreach(dep "${Z7_ROOT}/CPP/7zip/Archive/IArchive.h" "${LZOKAY_ROOT}/lzokay.hpp")
+  if(NOT EXISTS "${dep}")
+    message(FATAL_ERROR "Submodules are missing. Run:\n  git submodule update --init --recursive")
+  endif()
+endforeach()
+
+# --- Plugin sources ---------------------------------------------------------
+
+set(XDB_SOURCES
 )
 
-set(SRC_AR_COMMON
+# The pre-rewrite handler and the reference xray_re-tools code it uses.
+# Removed once the new handler is complete.
+set(LEGACY_SOURCES
+  ${XDB_DIR}/XdbHandler.cpp
+  ${XRAY_RE_ROOT}/sources/utils/converter/lzo/minilzo.c
+  ${XRAY_RE_ROOT}/sources/xray_re/xr_lzhuf.cxx
+  ${XRAY_RE_ROOT}/sources/xray_re/xr_scrambler.cxx
+)
+
+# --- 7-Zip sources the handler needs ----------------------------------------
+
+set(Z7_SOURCES
   ${Z7_ROOT}/CPP/7zip/Archive/Common/CoderMixer2.cpp
   ${Z7_ROOT}/CPP/7zip/Archive/Common/HandlerOut.cpp
   ${Z7_ROOT}/CPP/7zip/Archive/Common/InStreamWithCRC.cpp
   ${Z7_ROOT}/CPP/7zip/Archive/Common/ItemNameUtils.cpp
   ${Z7_ROOT}/CPP/7zip/Archive/Common/OutStreamWithCRC.cpp
   ${Z7_ROOT}/CPP/7zip/Archive/Common/ParseProperties.cpp
-)
 
-set(SRC_7Z_COMMON
   ${Z7_ROOT}/CPP/7zip/Common/CreateCoder.cpp
   ${Z7_ROOT}/CPP/7zip/Common/CWrappers.cpp
+  ${Z7_ROOT}/CPP/7zip/Common/FilterCoder.cpp
   ${Z7_ROOT}/CPP/7zip/Common/InBuffer.cpp
   ${Z7_ROOT}/CPP/7zip/Common/InOutTempBuffer.cpp
-  ${Z7_ROOT}/CPP/7zip/Common/FilterCoder.cpp
   ${Z7_ROOT}/CPP/7zip/Common/LimitedStreams.cpp
   ${Z7_ROOT}/CPP/7zip/Common/MethodId.cpp
   ${Z7_ROOT}/CPP/7zip/Common/MethodProps.cpp
-  ${Z7_ROOT}/CPP/Common/UTFConvert.cpp
   ${Z7_ROOT}/CPP/7zip/Common/OutBuffer.cpp
   ${Z7_ROOT}/CPP/7zip/Common/ProgressUtils.cpp
   ${Z7_ROOT}/CPP/7zip/Common/PropId.cpp
@@ -45,24 +59,25 @@ set(SRC_7Z_COMMON
   ${Z7_ROOT}/CPP/7zip/Common/StreamUtils.cpp
   ${Z7_ROOT}/CPP/7zip/Common/UniqBlocks.cpp
   ${Z7_ROOT}/CPP/7zip/Common/VirtThread.cpp
-)
 
-set(SRC_COMMON
+  ${Z7_ROOT}/CPP/7zip/Compress/CodecExports.cpp
+  ${Z7_ROOT}/CPP/7zip/Compress/CopyCoder.cpp
+  ${Z7_ROOT}/CPP/7zip/Compress/CopyRegister.cpp
+
   ${Z7_ROOT}/CPP/Common/CRC.cpp
   ${Z7_ROOT}/CPP/Common/CrcReg.cpp
   ${Z7_ROOT}/CPP/Common/IntToString.cpp
   ${Z7_ROOT}/CPP/Common/LzFindPrepare.cpp
-  ${Z7_ROOT}/CPP/Common/NewHandler.cpp
   ${Z7_ROOT}/CPP/Common/MyString.cpp
-  ${Z7_ROOT}/CPP/Common/StringConvert.cpp
-  ${Z7_ROOT}/CPP/Common/StringToInt.cpp
   ${Z7_ROOT}/CPP/Common/MyVector.cpp
-  ${Z7_ROOT}/CPP/Common/Wildcard.cpp
+  ${Z7_ROOT}/CPP/Common/NewHandler.cpp
   ${Z7_ROOT}/CPP/Common/StdInStream.cpp
   ${Z7_ROOT}/CPP/Common/StdOutStream.cpp
-)
+  ${Z7_ROOT}/CPP/Common/StringConvert.cpp
+  ${Z7_ROOT}/CPP/Common/StringToInt.cpp
+  ${Z7_ROOT}/CPP/Common/UTFConvert.cpp
+  ${Z7_ROOT}/CPP/Common/Wildcard.cpp
 
-set(SRC_WINDOWS
   ${Z7_ROOT}/CPP/Windows/FileDir.cpp
   ${Z7_ROOT}/CPP/Windows/FileFind.cpp
   ${Z7_ROOT}/CPP/Windows/FileIO.cpp
@@ -71,49 +86,37 @@ set(SRC_WINDOWS
   ${Z7_ROOT}/CPP/Windows/Synchronization.cpp
   ${Z7_ROOT}/CPP/Windows/System.cpp
   ${Z7_ROOT}/CPP/Windows/TimeUtils.cpp
-)
 
-set(SRC_COMPRESS
-  ${Z7_ROOT}/CPP/7zip/Compress/CodecExports.cpp
-  ${Z7_ROOT}/CPP/7zip/Compress/CopyCoder.cpp
-  ${Z7_ROOT}/CPP/7zip/Compress/CopyRegister.cpp
-)
-
-set(SRC_C
+  ${Z7_ROOT}/C/7zCrc.c
+  ${Z7_ROOT}/C/7zCrcOpt.c
   ${Z7_ROOT}/C/Alloc.c
   ${Z7_ROOT}/C/CpuArch.c
   ${Z7_ROOT}/C/LzFind.c
-  ${Z7_ROOT}/C/7zCrc.c
-  ${Z7_ROOT}/C/7zCrcOpt.c
   ${Z7_ROOT}/C/Threads.c
 )
 
-add_library(Xdb SHARED
-  ${SRC_XDB}
-  ${SRC_AR_COMMON}
-  ${SRC_7Z_COMMON}
-  ${SRC_COMMON}
-  ${SRC_WINDOWS}
-  ${SRC_COMPRESS}
-  ${SRC_C}
+# --- Core: everything except the DLL entry points ---------------------------
+# An OBJECT library (not STATIC), so that self-registering objects such as the
+# CRC table initializer in CRC.cpp are never dropped by the linker.
+
+add_library(xdb_core OBJECT
+  ${XDB_SOURCES}
+  ${LEGACY_SOURCES}
+  ${Z7_SOURCES}
+  ${LZOKAY_ROOT}/lzokay.cpp
 )
 
-target_include_directories(Xdb PRIVATE
-  ${ROOT}/CPP/7zip/Archive/Xdb
-  ${ROOT}/third_party/xray_re-tools/sources/utils/converter/lzo
-  ${ROOT}/third_party/xray_re-tools/sources/xray_re
+target_include_directories(xdb_core PUBLIC
+  ${XDB_DIR}
+  ${LZOKAY_ROOT}
+  ${XRAY_RE_ROOT}/sources/utils/converter/lzo
+  ${XRAY_RE_ROOT}/sources/xray_re
   ${Z7_ROOT}/CPP
-  ${Z7_ROOT}/CPP/include
-  ${Z7_ROOT}/CPP/Common
   ${Z7_ROOT}/CPP/7zip
-  ${Z7_ROOT}/CPP/7zip/Archive
-  ${Z7_ROOT}/CPP/7zip/Common
-  ${Z7_ROOT}/CPP/Windows
-  ${Z7_ROOT}/CPP/Windows/Control
   ${Z7_ROOT}/C
 )
 
-target_compile_definitions(Xdb PRIVATE
+target_compile_definitions(xdb_core PUBLIC
   _WIN32_WINNT=0x0601
   UNICODE
   _UNICODE
@@ -121,13 +124,29 @@ target_compile_definitions(Xdb PRIVATE
 )
 
 if(MSVC)
-  target_compile_options(Xdb PRIVATE /W3 /EHsc)
+  target_compile_options(xdb_core PUBLIC /utf-8 $<$<COMPILE_LANGUAGE:CXX>:/EHsc>)
+  # Our own code is held to a stricter standard than the third-party sources.
+  set_source_files_properties(${XDB_SOURCES} PROPERTIES COMPILE_OPTIONS "/W4;/WX")
 endif()
+
+# --- Plugin DLL -------------------------------------------------------------
+
+add_library(Xdb SHARED
+  ${XDB_DIR}/XdbRegister.cpp
+  ${XDB_DIR}/Xdb.def
+  ${Z7_ROOT}/CPP/7zip/Archive/ArchiveExports.cpp
+  ${Z7_ROOT}/CPP/7zip/Archive/DllExports2.cpp
+)
+target_link_libraries(Xdb PRIVATE xdb_core)
 
 set_target_properties(Xdb PROPERTIES
   OUTPUT_NAME "XDB_$<IF:$<EQUAL:${CMAKE_SIZEOF_VOID_P},8>,x64,x86>"
   RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
 )
 
-# Ensure required 7-Zip exports are present
-target_link_options(Xdb PRIVATE "/DEF:${Z7_ROOT}/CPP/7zip/Archive/Archive2.def")
+# --- Tests ------------------------------------------------------------------
+
+if(XDB_BUILD_TESTS)
+  enable_testing()
+  add_subdirectory(tests)
+endif()
