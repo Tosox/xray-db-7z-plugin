@@ -10,6 +10,7 @@ set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
 add_executable(xdb_tests
+  HeaderTest.cpp
   InitGuid.cpp
   LzhufTest.cpp
   LzoTest.cpp
