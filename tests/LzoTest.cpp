@@ -9,9 +9,12 @@ extern "C" {
 #include "minilzo.h"
 }
 
+#include "XdbCodec.h"
+
 #include "TestData.h"
 
 using namespace NXdbTest;
+using namespace NArchive::NXdb;
 
 namespace {
 
@@ -102,6 +105,27 @@ TEST(Lzo, LzokayRejectsWrongSize)
   const CBytes sample = MakeTextBytes(1000);
   CBytes decoded;
   EXPECT_FALSE(LzokayDecompress(LzokayCompress(sample), sample.size() - 1, decoded));
+}
+
+TEST(Lzo, ExpansionLimitFitsRealStreams)
+{
+  // Zeros compress better than anything else; both compressors' output must pass.
+  const CBytes zeros((size_t)64 << 20, 0);
+  for (const CBytes &stream : { LzokayCompress(zeros), MiniLzoCompress(zeros) })
+  {
+    CByteBuffer data;
+    ASSERT_TRUE(UnpackItemData(kMethod_Lzo, stream.data(), stream.size(), zeros.size(), data)) << stream.size();
+    EXPECT_EQ(data.Size(), zeros.size());
+  }
+}
+
+TEST(Lzo, RejectsImpossibleSizesWithoutAllocating)
+{
+  // A damaged size field asking for 2 GB from a few bytes of input.
+  const CBytes stream = LzokayCompress(MakeTextBytes(3000));
+  CByteBuffer data;
+  EXPECT_FALSE(UnpackItemData(kMethod_Lzo, stream.data(), stream.size(), (size_t)0x7FFFFFFF, data));
+  EXPECT_EQ(data.Size(), 0u);
 }
 
 } // namespace

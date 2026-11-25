@@ -10,6 +10,10 @@
 namespace NArchive {
 namespace NXdb {
 
+// LZO1X produces at most about 255 bytes per input byte (long matches are
+// extended by one byte per 255), so anything above this is damaged.
+static const unsigned kMaxLzoExpansion = 1024;
+
 bool UnpackItemData(EMethod method, const Byte *packed, size_t packSize, size_t size, CByteBuffer &data)
 {
   switch (method)
@@ -25,6 +29,9 @@ bool UnpackItemData(EMethod method, const Byte *packed, size_t packSize, size_t 
 
     case kMethod_Lzo:
     {
+      // A damaged size must not make us allocate gigabytes for a few bytes of input.
+      if (size > (UInt64)packSize * kMaxLzoExpansion)
+        return false;
       data.Alloc(size);
       size_t outSize = 0;
       return lzokay::decompress(packed, packSize, data, size, outSize) == lzokay::EResult::Success
