@@ -54,11 +54,14 @@ API_FUNC_static_IsArc IsArc_Xdb(const Byte *p, size_t size)
 }
 }
 
+// The signatures are too short to search for inside other files: 7-Zip
+// would find "archives" in the middle of SQLite databases and game files.
+// So, like its Base64 handler, the format is only tried by extension.
 REGISTER_ARC_IO(
     "xdb", k_Exts, NULL, 0xB0,
     k_Signature,
     0,
-    NArcInfoFlags::kMultiSignature,
+    NArcInfoFlags::kMultiSignature | NArcInfoFlags::kByExtOnlyOpen,
     0,
     IsArc_Xdb)
 

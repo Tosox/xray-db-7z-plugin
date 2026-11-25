@@ -105,6 +105,12 @@ TEST(InArchive, RejectsWhatIsNotAnArchive)
   CBytes truncated = BuildArchive(kVersion_Xdb, MakeSampleFiles());
   truncated.pop_back();
   EXPECT_EQ(Open(arc, truncated), S_FALSE);
+
+  // Empty data and header chunks, as zero bytes inside other files look.
+  CBytes empty;
+  AppendChunk(empty, NChunkId::kData, CBytes());
+  AppendChunk(empty, NChunkId::kHeader, CBytes());
+  EXPECT_EQ(Open(arc, empty), S_FALSE);
 }
 
 TEST(InArchive, ReportsCorruptHeader)

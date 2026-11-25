@@ -74,7 +74,9 @@ HRESULT CInArchive::ReadChunks(IInStream *stream, UInt64 fileSize)
           _data = chunk;
         break;
       case NChunkId::kHeader:
-        if (!_header.Found)
+        // Even an empty file table takes a few bytes; like the original
+        // tools, treat an empty header chunk as missing.
+        if (!_header.Found && chunk.Size != 0)
           _header = chunk;
         break;
       case NChunkId::kUserData:
