@@ -134,7 +134,13 @@ HRESULT CUpdater::CopyItem(UInt32 indexInArc, CItem &item)
   if (src.Method == kMethod_Store)
   {
     const HRESULT res = CopyStoredData(_inStream, src.PackSize, item);
-    return res == S_FALSE ? E_FAIL : res; // S_FALSE: the source archive is truncated
+    if (res != S_OK)
+      return res == S_FALSE ? E_FAIL : res; // S_FALSE: the source archive is truncated
+    // Keep the stored CRC rather than the one just computed, as for compressed
+    // files: if the data was damaged, the damage stays detectable.
+    if (src.CrcDefined)
+      item.Crc = src.Crc;
+    return S_OK;
   }
 
   // A compressed file can be copied as it is if the target version uses the

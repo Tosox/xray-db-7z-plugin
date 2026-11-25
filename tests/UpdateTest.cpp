@@ -169,6 +169,33 @@ TEST(Update, CopiesUnchangedFilesByteForByte)
   ExpectAllExtractOk(updated);
 }
 
+// Updating something else must not make existing damage undetectable.
+TEST(Update, KeepsTheCrcOfDamagedFiles)
+{
+  const std::vector<CTestFile> files = MakeSampleFiles();
+  CBytes damaged = BuildArchive(kVersion_Xdb, files);
+  const auto pos = std::search(damaged.begin(), damaged.end(), files[2].Data.begin(), files[2].Data.end());
+  ASSERT_NE(pos, damaged.end());
+  pos[100] ^= 0x10; // one flipped bit in the stored random.bin
+
+  COpened arc(damaged);
+  ASSERT_EQ(arc.ExtractAll().Results[2], NExtract::NOperationResult::kCRCError);
+  const UInt32 storedCrc = ReadArchive(damaged).Items[2].Crc;
+
+  std::vector<CUpdateEntry> entries;
+  for (Int32 i = 0; i < (Int32)files.size(); i++)
+    entries.push_back(Keep(i));
+  entries.push_back(NewFile(L"new.ltx", MakeTextBytes(500, 7)));
+  CBytes bytes;
+  ASSERT_EQ(RunUpdate(arc.Handler, entries, bytes), S_OK);
+
+  EXPECT_EQ(ReadArchive(bytes).Items[2].Crc, storedCrc);
+  COpened updated(bytes);
+  CExtractResults result = updated.ExtractAll();
+  EXPECT_EQ(result.Results[2], NExtract::NOperationResult::kCRCError);
+  EXPECT_EQ(result.Results[1], NExtract::NOperationResult::kOK);
+}
+
 TEST(Update, DeletesRenamesAndReplaces)
 {
   const std::vector<CTestFile> files = MakeSampleFiles();
