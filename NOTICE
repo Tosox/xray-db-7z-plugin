@@ -1,18 +1,26 @@
-This project includes code derived from xray_re-tools.
+The plugin binaries contain the following third-party code:
 
-Original project:
-http://xray.codeplex.com/
-Author: bardak (setback)
+- 7-Zip (third_party/7zip), by Igor Pavlov, primarily under the GNU LGPL
+  v2.1 or later, with BSD-licensed files and an unRAR license restriction
+  for RAR code. See third_party/7zip/DOC/License.txt and unRarLicense.txt.
 
-Mirror used:
-https://github.com/abramcumner/xray_re-tools
+- lzokay (third_party/lzokay), by Jack Andersen, under the MIT license.
+  See third_party/lzokay/LICENSE. Used for LZO1X compression.
 
-The original project does not provide a standard open-source
-license. Use is based on the permission statement from the
-upstream project: "you can do whatever you want, just do not
-say you wrote it."
+- LZHUF (CPP/7zip/Archive/Xdb/XdbLzhuf.cpp), a port of LZHUF.C
+  (c) 1989 by Haruyasu Yoshizaki, Haruhiko Okumura and Kenji Rikitake:
+  "All rights reserved. Permission granted for non-commercial use."
+  This restriction applies to that component.
 
-This project also bundles:
-- 7-Zip source code (third_party/7zip), primarily under the GNU LGPL v2.1 or later, with BSD-licensed files and an unRAR license restriction for RAR code. See third_party/7zip/DOC/License.txt and unRarLicense.txt.
+The format knowledge (docs/db-format.md), the header cipher and the LZHUF
+port are based on xray_re-tools by bardak (setback),
+http://xray.codeplex.com/, mirrored at
+https://github.com/abramcumner/xray_re-tools. The original project does not
+provide a standard open-source license; its permission statement reads:
+"you can do whatever you want, just do not say you wrote it."
+
+The tests additionally build xray_re-tools sources and its bundled miniLZO
+(GNU GPL v2) as reference implementations. Neither is part of the plugin
+binaries.
 
 All third-party components remain under their respective licenses.

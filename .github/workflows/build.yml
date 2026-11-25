@@ -30,6 +30,9 @@ jobs:
       - name: Build
         run: cmake --build _build/${{ matrix.arch }} --config Release --parallel
 
+      - name: Test
+        run: ctest --test-dir _build/${{ matrix.arch }} -C Release --output-on-failure
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
