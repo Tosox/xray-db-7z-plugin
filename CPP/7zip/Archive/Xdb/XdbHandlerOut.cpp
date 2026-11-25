@@ -20,15 +20,16 @@ namespace NXdb {
 // A userdata file larger than this is certainly a mistake.
 static const UInt64 kMaxUserDataFileSize = (UInt64)1 << 24;
 
-// Written to new xdb archives when no userdata is given (gen_xdb_ud).
+// Written to new xdb archives when no userdata is given (gen_xdb_ud). The
+// values are those the games use for archives that aren't multiplayer maps.
 static const char kGeneratedUserData[] =
     "[header]\n"
     "auto_load = true\n"
-    "level_name = stalker\n"
-    "level_ver = 1.0\n"
     "entry_point = $fs_root$\\gamedata\\\n"
+    "level_name = single\n"
+    "level_ver = 1.0\n"
     "creator = \"Modder\"\n"
-    "link = \"https://github.com/Tosox/xray-db-7z-plugin\"\n";
+    "link = \"\"\n";
 
 void COptions::Init()
 {
