@@ -201,8 +201,23 @@ TEST(Header, RoundTripAllVersions)
     ASSERT_TRUE(WriteHeader(version, items, header));
     CObjectVector<CItem> parsed;
     ASSERT_TRUE(ParseHeader(version, header, header.Size(), parsed));
-    ExpectSameItems(parsed, items);
+    CObjectVector<CItem> expected;
+    FOR_VECTOR (i, items)
+      if (!(items[i].IsDir && version == kVersion_11xx))
+        expected.Add(items[i]);
+    ExpectSameItems(parsed, expected);
   }
+}
+
+TEST(Header, Writes11xxWithoutDirectoryRecords)
+{
+  // The reference 11xx unpacker has no notion of directories and crashes on one.
+  CObjectVector<CItem> items;
+  items.Add(MakeDir("config"));
+  items.Add(MakeFile("config\\a.ltx", 8, 10, 10, 0, kMethod_Store));
+  CByteBuffer header;
+  ASSERT_TRUE(WriteHeader(kVersion_11xx, items, header));
+  EXPECT_EQ(ToBytes(header), CBytesBuilder().CStr("config\\a.ltx").U32(1).U32(8).U32(10).Bytes);
 }
 
 TEST(Header, DirectoriesAreWrittenWithTrailingBackslash)

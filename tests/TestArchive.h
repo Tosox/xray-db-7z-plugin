@@ -56,8 +56,19 @@ inline std::vector<CTestFile> MakeSampleFiles()
     TestFile("config\\system.ltx", MakeTextBytes(5000, 1), true),
     TestFile("config\\random.bin", MakeRandomBytes(3000, 2), false),
     TestFile("config\\empty.ltx", CBytes(), false),
+    TestDir("scripts"),
     TestFile("scripts\\bind_stalker.script", MakeTextBytes(20000, 3), true),
   };
+}
+
+// What an archive of (version) holds after writing (files): 11xx keeps no directories.
+inline std::vector<CTestFile> ExpectedFiles(EVersion version, const std::vector<CTestFile> &files)
+{
+  std::vector<CTestFile> result;
+  for (const CTestFile &file : files)
+    if (!(file.IsDir && version == kVersion_11xx))
+      result.push_back(file);
+  return result;
 }
 
 struct CArchiveOptions

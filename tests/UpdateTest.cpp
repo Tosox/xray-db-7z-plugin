@@ -88,21 +88,36 @@ TEST(Update, CreatesEveryVersion)
         + strlen(GetVersionInfo(version).Name));
     ASSERT_EQ(RunUpdate(CreateHandler(), entries, bytes, { { L"dbver", CPropVariant(name.c_str()) } }), S_OK);
 
+    // 11xx keeps no directories; the others get a record for "scripts", which
+    // was added by its file's path alone.
+    std::vector<CUpdateEntry> kept;
+    for (const CUpdateEntry &e : entries)
+      if (!(e.IsDir && version == kVersion_11xx))
+        kept.push_back(e);
+    if (version != kVersion_11xx)
+      kept.insert(kept.end() - 1, NewDir(L"scripts"));
+
     const CInArchive arc = ReadArchive(bytes);
     EXPECT_EQ(arc.Version, version);
-    ASSERT_EQ(arc.Items.Size(), entries.size());
-    EXPECT_STREQ(arc.Items[1].Name, "config\\system.ltx");
-    EXPECT_STREQ(arc.Items[2].Name, "config\\random.bin");
-    EXPECT_NE(arc.Items[1].Method, kMethod_Store);  // text compresses
-    EXPECT_EQ(arc.Items[2].Method, kMethod_Store);  // random data doesn't
+    ASSERT_EQ(arc.Items.Size(), kept.size());
+    const unsigned first = (version == kVersion_11xx) ? 0 : 1;
+    EXPECT_STREQ(arc.Items[first].Name, "config\\system.ltx");
+    EXPECT_STREQ(arc.Items[first + 1].Name, "config\\random.bin");
+    EXPECT_NE(arc.Items[first].Method, kMethod_Store);    // text compresses
+    EXPECT_EQ(arc.Items[first + 1].Method, kMethod_Store); // random data doesn't
+    if (version != kVersion_11xx)
+    {
+      EXPECT_TRUE(arc.Items[4].IsDir);
+      EXPECT_STREQ(arc.Items[4].Name, "scripts");
+    }
 
     COpened opened(bytes);
     CExtractResults result = opened.ExtractAll();
-    for (UInt32 i = 0; i < entries.size(); i++)
+    for (UInt32 i = 0; i < kept.size(); i++)
     {
       EXPECT_EQ(result.Results[i], NExtract::NOperationResult::kOK) << i;
-      if (!entries[i].IsDir)
-        EXPECT_EQ(result.Data[i], entries[i].Data) << i;
+      if (!kept[i].IsDir)
+        EXPECT_EQ(result.Data[i], kept[i].Data) << i;
     }
   }
 }
@@ -148,6 +163,20 @@ TEST(Update, WritesDirectoriesAndChunksInReferenceOrder)
   EXPECT_TRUE(arc.Items[0].IsDir);
 }
 
+TEST(Update, AddsMissingDirectories)
+{
+  // "a" has its own record, later in the list; only "a\b" is missing.
+  CBytes bytes;
+  ASSERT_EQ(RunUpdate(CreateHandler(), { NewFile(L"A\\b\\c.ltx", MakeTextBytes(100)), NewDir(L"a") }, bytes), S_OK);
+  const CInArchive arc = ReadArchive(bytes);
+  ASSERT_EQ(arc.Items.Size(), 3u);
+  EXPECT_TRUE(arc.Items[0].IsDir);
+  EXPECT_STREQ(arc.Items[0].Name, "a\\b");
+  EXPECT_STREQ(arc.Items[1].Name, "a\\b\\c.ltx");
+  EXPECT_TRUE(arc.Items[2].IsDir);
+  EXPECT_STREQ(arc.Items[2].Name, "a");
+}
+
 TEST(Update, CopiesUnchangedFilesByteForByte)
 {
   const std::vector<CTestFile> files = MakeSampleFiles();
@@ -161,7 +190,7 @@ TEST(Update, CopiesUnchangedFilesByteForByte)
   ASSERT_EQ(RunUpdate(arc.Handler, entries, bytes), S_OK);
 
   // The LZO stream of a kept file appears unchanged in the new archive.
-  const CBytes packed = PackFile(kMethod_Lzo, files[4].Data);
+  const CBytes packed = PackFile(kMethod_Lzo, files[5].Data);
   EXPECT_NE(std::search(bytes.begin(), bytes.end(), packed.begin(), packed.end()), bytes.end());
 
   COpened updated(bytes);
@@ -209,11 +238,12 @@ TEST(Update, DeletesRenamesAndReplaces)
       // 2 is deleted
       Replace(3, L"config\\empty.ltx", replacement),
       Keep(4),
+      Keep(5),
     }, bytes), S_OK);
 
   const CInArchive result = ReadArchive(bytes);
   EXPECT_EQ(result.Version, kVersion_2945);
-  ASSERT_EQ(result.Items.Size(), 4u);
+  ASSERT_EQ(result.Items.Size(), 5u);
   EXPECT_STREQ(result.Items[1].Name, "config\\renamed.ltx");
   EXPECT_STREQ(result.Items[2].Name, "config\\empty.ltx");
   EXPECT_EQ(result.Items[2].Size, replacement.size());
@@ -241,8 +271,10 @@ TEST(Update, ConvertsBetweenVersions)
     SCOPED_TRACE(std::string(GetVersionInfo(conversion[0]).Name) + " -> " + to.Name);
     COpened arc(BuildArchive(conversion[0], files));
     std::vector<CUpdateEntry> entries;
-    for (Int32 i = 0; i < (Int32)files.size(); i++)
+    for (Int32 i = 0; i < (Int32)arc.NumItems(); i++)
       entries.push_back(Keep(i));
+    // Directories dropped by 11xx come back as generated records.
+    const std::vector<CTestFile> expected = ExpectedFiles(conversion[1], files);
     const std::wstring name(to.Name, to.Name + strlen(to.Name));
     CBytes bytes;
     ASSERT_EQ(RunUpdate(arc.Handler, entries, bytes, { { L"dbver", CPropVariant(name.c_str()) } }), S_OK);
@@ -259,12 +291,14 @@ TEST(Update, ConvertsBetweenVersions)
     }
 
     COpened converted(bytes);
+    // Converting to xdb generates userdata, shown as [userdata].ltx after the files.
+    EXPECT_EQ(converted.NumItems(), expected.size() + (conversion[1] == kVersion_Xdb ? 1 : 0));
     CExtractResults extracted = converted.ExtractAll();
-    for (UInt32 i = 0; i < files.size(); i++)
+    for (UInt32 i = 0; i < expected.size(); i++)
     {
       EXPECT_EQ(extracted.Results[i], NExtract::NOperationResult::kOK) << i;
-      if (!files[i].IsDir)
-        EXPECT_EQ(extracted.Data[i], files[i].Data) << i;
+      if (!expected[i].IsDir)
+        EXPECT_EQ(extracted.Data[i], expected[i].Data) << i;
     }
   }
 }

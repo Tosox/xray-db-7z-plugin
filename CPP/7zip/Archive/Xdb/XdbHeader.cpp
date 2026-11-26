@@ -219,6 +219,13 @@ static size_t GetRecordSize(ERecordLayout layout, const AString &name)
   return 2 + 3 * 4 + name.Len() + 4;
 }
 
+// 11xx has no directory records: the reference unpacker has no notion of
+// them and crashes on one, so they are left out.
+static bool IsWritten(ERecordLayout layout, const CItem &item)
+{
+  return !(item.IsDir && layout == kLayout_11xx);
+}
+
 bool WriteHeader(EVersion version, const CObjectVector<CItem> &items, CByteBuffer &header)
 {
   const ERecordLayout layout = GetVersionInfo(version).Layout;
@@ -226,6 +233,8 @@ bool WriteHeader(EVersion version, const CObjectVector<CItem> &items, CByteBuffe
   size_t totalSize = 0;
   FOR_VECTOR (i, items)
   {
+    if (!IsWritten(layout, items[i]))
+      continue;
     const AString name = GetStoredName(items[i]);
     if (layout == kLayout_2947 && name.Len() > 0xFFFF - kRecordSizeBias_2947)
       return false;
@@ -238,6 +247,8 @@ bool WriteHeader(EVersion version, const CObjectVector<CItem> &items, CByteBuffe
   FOR_VECTOR (i, items)
   {
     const CItem &item = items[i];
+    if (!IsWritten(layout, item))
+      continue;
     const AString name = GetStoredName(item);
     // Directories are written with offset 0 and all other fields 0.
     const UInt32 offset = item.IsDir ? 0 : item.Offset;
@@ -249,8 +260,7 @@ bool WriteHeader(EVersion version, const CObjectVector<CItem> &items, CByteBuffe
     {
       case kLayout_11xx:
         writer.WriteZeroTerminatedString(name);
-        // A directory is marked "stored", so its record can't pass as a 2215 directory.
-        writer.WriteUInt32(item.Method == kMethod_Lzhuf ? 0 : 1);
+        writer.WriteUInt32(item.Method == kMethod_Lzhuf ? 0 : 1); // "stored"
         writer.WriteUInt32(offset);
         writer.WriteUInt32(packSize);
         break;

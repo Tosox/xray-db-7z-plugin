@@ -81,12 +81,12 @@ TEST(Handler, ListsItemsAndProperties)
 
 TEST(Handler, ExtractsEveryVersion)
 {
-  const std::vector<CTestFile> files = MakeSampleFiles();
   for (EVersion version : kAllVersions)
   {
     SCOPED_TRACE(GetVersionInfo(version).Name);
+    const std::vector<CTestFile> files = ExpectedFiles(version, MakeSampleFiles());
     COpenedArchive arc;
-    ASSERT_EQ(arc.Open(BuildArchive(version, files)), S_OK);
+    ASSERT_EQ(arc.Open(BuildArchive(version, MakeSampleFiles())), S_OK);
     CExtractResults result = arc.ExtractAll();
     for (UInt32 i = 0; i < files.size(); i++)
     {

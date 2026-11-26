@@ -21,11 +21,11 @@ HRESULT Open(CInArchive &arc, const CBytes &bytes)
 
 TEST(InArchive, DetectsEveryVersion)
 {
-  const std::vector<CTestFile> files = MakeSampleFiles();
   for (EVersion version : kAllVersions)
   {
     SCOPED_TRACE(GetVersionInfo(version).Name);
-    const CBytes bytes = BuildArchive(version, files);
+    const CBytes bytes = BuildArchive(version, MakeSampleFiles());
+    const std::vector<CTestFile> files = ExpectedFiles(version, MakeSampleFiles());
     CInArchive arc;
     ASSERT_EQ(Open(arc, bytes), S_OK);
     EXPECT_FALSE(arc.HeadersError);
@@ -53,7 +53,7 @@ TEST(InArchive, DetectsVersionWithHeaderChunkFirst)
     ASSERT_EQ(Open(arc, BuildArchive(version, MakeSampleFiles(), options)), S_OK);
     EXPECT_FALSE(arc.HeadersError);
     EXPECT_EQ(arc.Version, version);
-    EXPECT_EQ(arc.Items.Size(), MakeSampleFiles().size());
+    EXPECT_EQ(arc.Items.Size(), ExpectedFiles(version, MakeSampleFiles()).size());
   }
 }
 

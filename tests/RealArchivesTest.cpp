@@ -110,7 +110,8 @@ TEST_F(RealArchives, EveryFilePassesItsCrc)
   }
 }
 
-// Rewriting an archive without changes keeps every name, size and CRC.
+// Rewriting an archive without changes keeps every name, size and CRC, and
+// adds only the folder records it lacked.
 TEST_F(RealArchives, RewriteKeepsEverything)
 {
   for (const std::string &path : Paths)
@@ -137,11 +138,14 @@ TEST_F(RealArchives, RewriteKeepsEverything)
     ASSERT_EQ(rewritten.Open(MakeInStream(bytes), nullptr), S_OK);
     EXPECT_EQ(rewritten.Version, original.Version);
     EXPECT_EQ(rewritten.UserDataDefined, original.UserDataDefined);
-    ASSERT_EQ(rewritten.Items.Size(), original.Items.Size());
-    for (unsigned i = 0; i < original.Items.Size(); i++)
+    unsigned j = 0;
+    for (unsigned i = 0; i < original.Items.Size(); i++, j++)
     {
-      const CItem &a = rewritten.Items[i];
       const CItem &b = original.Items[i];
+      while (j < rewritten.Items.Size() && rewritten.Items[j].IsDir && rewritten.Items[j].Name != b.Name)
+        j++;
+      ASSERT_LT(j, rewritten.Items.Size()) << b.Name.Ptr();
+      const CItem &a = rewritten.Items[j];
       EXPECT_STREQ(a.Name, b.Name);
       EXPECT_EQ(a.IsDir, b.IsDir);
       EXPECT_EQ(a.Size, b.Size);

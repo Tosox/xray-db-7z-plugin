@@ -84,7 +84,10 @@ u32  offset
 ```
 
 **Directories** have `offset == 0` and all sizes 0. The reference packer writes their names with a
-trailing `\`.
+trailing `\`. The engine does not need them (it derives folders from the file names), but the
+original packers write one for every folder, so this plugin adds a record for each folder on a file's
+path that has none. The reference 11xx unpacker has no notion of directories (it crashes on such a
+record), so this plugin writes 11xx archives without them; empty folders are lost there.
 
 **Files** are LZO1X-compressed when `size_real != size_compressed` and stored otherwise
 (11xx: see the `stored` flag). Writers keep compressed data only when it is strictly smaller.

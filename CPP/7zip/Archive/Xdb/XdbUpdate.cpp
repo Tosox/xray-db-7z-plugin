@@ -49,6 +49,54 @@ HRESULT ReadStreamToBuffer(ISequentialInStream *stream, UInt64 sizeHint, CByteBu
 
 namespace {
 
+// A lowercase directory name, kept in a sorted CObjectVector.
+struct CDirName
+{
+  AString Name;
+  int Compare(const CDirName &other) const { return strcmp(Name, other.Name); }
+};
+
+/*
+  Inserts a directory record before the first item under each folder that has
+  none, as the original packer writes one for every folder. The engine does not
+  need them; they make the archive the same however its files were added
+  (a file added by its path alone, or an archive converted from 11xx).
+*/
+void AddMissingDirs(CObjectVector<CItem> &items)
+{
+  CObjectVector<CDirName> known;
+  FOR_VECTOR (i, items)
+  {
+    if (!items[i].IsDir)
+      continue;
+    CDirName dir;
+    dir.Name = items[i].Name;
+    dir.Name.MakeLower_Ascii();
+    known.AddToUniqueSorted(dir);
+  }
+
+  CObjectVector<CItem> result;
+  FOR_VECTOR (i, items)
+  {
+    const CItem &item = items[i];
+    for (int sep = item.Name.Find('\\'); sep > 0; sep = item.Name.Find('\\', (unsigned)sep + 1))
+    {
+      CDirName dir;
+      dir.Name.SetFrom(item.Name, (unsigned)sep);
+      dir.Name.MakeLower_Ascii();
+      const unsigned numKnown = known.Size();
+      known.AddToUniqueSorted(dir);
+      if (known.Size() == numKnown)
+        continue;
+      CItem &newDir = result.AddNew();
+      newDir.Name.SetFrom(item.Name, (unsigned)sep);
+      newDir.IsDir = true;
+    }
+    result.Add(item);
+  }
+  items = result;
+}
+
 class CUpdater
 {
   IInStream *_inStream;
@@ -273,6 +321,7 @@ HRESULT CUpdater::Update(const CObjectVector<CUpdateItem> &updateItems, IOutStre
   }
 
   RINOK(_out.EndDataChunk())
+  AddMissingDirs(items);
   RINOK(WriteHeader(items))
   _progress->InSize = _progress->OutSize = completed;
   return _progress->SetCur();
