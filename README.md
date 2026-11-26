@@ -19,7 +19,7 @@ edit it in place, convert it between versions, and pack your mod into a new one.
 ## 📋 Features
 
 - Open, extract, test and create S.T.A.L.K.E.R. DB archives directly in 7-Zip
-- All archive versions: `xdb` (Clear Sky, Call of Pripyat, mods), `2947ww` and `2947ru` (Shadow of Chernobyl), `2945`, `2215` and `11xx` (builds 1114–1472)
+- All archive versions: `xdb` (Clear Sky, Call of Pripyat), `2947ww` and `2947ru` (Shadow of Chernobyl), `2945`, `2215` and `11xx` (builds 1114–1472)
 - Edit archives in place: add, replace, rename and delete files and folders
 - Convert archives between versions
 - The version is detected from the archive's contents, not its extension

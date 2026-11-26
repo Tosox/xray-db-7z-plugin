@@ -75,7 +75,7 @@ static const char k_FormatOptions[] =
     "[dbver]\n"
     "type=enum\n"
     "values=auto|xdb|2947ww|2947ru|2945|2215|11xx\n"
-    "labels=Auto|xdb (Clear Sky, Call of Pripyat, mods)|2947ww (Shadow of Chernobyl)"
+    "labels=Auto|xdb (Clear Sky, Call of Pripyat)|2947ww (Shadow of Chernobyl)"
         "|2947ru (Shadow of Chernobyl, Russian)|2945|2215|11xx\n"
     "label=DB version\n"
     "tip=Auto keeps the version of an existing archive and uses xdb for new ones\n"
