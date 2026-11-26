@@ -331,22 +331,63 @@ TEST(Update, LeavesTheHandlerUnchanged)
   ExpectAllExtractOk(arc);
 }
 
-TEST(Update, LastOfDuplicateNamesWins)
+TEST(Update, RejectsTwoFilesWithOneName)
 {
   CBytes bytes;
-  ASSERT_EQ(RunUpdate(CreateHandler(), {
+  EXPECT_EQ(RunUpdate(CreateHandler(), {
       NewFile(L"A.ltx", MakeTextBytes(10, 1)),
       NewFile(L"a.ltx", MakeTextBytes(20, 2)),
-    }, bytes), S_OK);
+    }, bytes), k_hres_NameInUse);
+}
+
+TEST(Update, RejectsAFileWithAFolderName)
+{
+  CBytes bytes;
+  EXPECT_EQ(RunUpdate(CreateHandler(), { NewDir(L"a"), NewFile(L"A", MakeTextBytes(10)) }, bytes), k_hres_NameInUse);
+  // a folder that only exists above another file
+  EXPECT_EQ(RunUpdate(CreateHandler(), {
+      NewFile(L"a\\b\\c.ltx", MakeTextBytes(10)),
+      NewFile(L"a\\b", MakeTextBytes(10)),
+    }, bytes), k_hres_NameInUse);
+}
+
+TEST(Update, RejectsRenamingOntoAUsedName)
+{
+  const std::vector<CTestFile> files = MakeSampleFiles();
+  COpened arc(BuildArchive(kVersion_Xdb, files));
+  for (const wchar_t *target : { L"config\\System.ltx", L"scripts" })
+  {
+    std::vector<CUpdateEntry> entries;
+    for (Int32 i = 0; i < (Int32)files.size(); i++)
+      entries.push_back(Keep(i));
+    entries[3] = Rename(3, target); // config\empty.ltx
+    CBytes bytes;
+    EXPECT_EQ(RunUpdate(arc.Handler, entries, bytes), k_hres_NameInUse) << target;
+  }
+}
+
+TEST(Update, MergesAFolderListedTwice)
+{
+  CBytes bytes;
+  ASSERT_EQ(RunUpdate(CreateHandler(), { NewDir(L"a"), NewFile(L"a\\x.ltx", MakeTextBytes(10)), NewDir(L"A") }, bytes), S_OK);
   const CInArchive arc = ReadArchive(bytes);
-  ASSERT_EQ(arc.Items.Size(), 1u);
-  EXPECT_EQ(arc.Items[0].Size, 20u);
+  ASSERT_EQ(arc.Items.Size(), 2u);
+  EXPECT_STREQ(arc.Items[0].Name, "a");
+  EXPECT_STREQ(arc.Items[1].Name, "a\\x.ltx");
 }
 
 TEST(Update, RejectsNamesOutsideCp1251)
 {
   CBytes bytes;
-  EXPECT_EQ(RunUpdate(CreateHandler(), { NewFile(L"日本.ltx", MakeTextBytes(10)) }, bytes), E_INVALIDARG);
+  EXPECT_EQ(RunUpdate(CreateHandler(), { NewFile(L"日本.ltx", MakeTextBytes(10)) }, bytes), k_hres_NotInCodePage);
+}
+
+TEST(Update, RejectsEmptyNames)
+{
+  CBytes bytes;
+  EXPECT_EQ(RunUpdate(CreateHandler(), { NewFile(L"a\\\\b.ltx", MakeTextBytes(10)) }, bytes), k_hres_BadName);
+  // a file renamed to an empty name
+  EXPECT_EQ(RunUpdate(CreateHandler(), { NewFile(L"scripts\\", MakeTextBytes(10)) }, bytes), k_hres_BadName);
 }
 
 TEST(Update, CreatesAnEmptyArchive)
@@ -486,6 +527,15 @@ TEST_F(UserDataUpdate, RenamingTheUserDataKeepsItAsAFile)
   EXPECT_STREQ(result.Items[(unsigned)Files.size()].Name, "notes.ltx");
   COpened renamed(bytes);
   EXPECT_EQ(renamed.ExtractAll().Data[(UInt32)Files.size()], UserData);
+}
+
+TEST_F(UserDataUpdate, RenamingTheUserDataOntoAFolderFails)
+{
+  COpened arc(BuildWithUserData());
+  std::vector<CUpdateEntry> entries = KeepFiles();
+  entries.push_back(Rename(UserDataIndex, L"config"));
+  CBytes bytes;
+  EXPECT_EQ(RunUpdate(arc.Handler, entries, bytes), k_hres_NameInUse);
 }
 
 TEST_F(UserDataUpdate, ConvertingToOtherVersionsDropsUserData)

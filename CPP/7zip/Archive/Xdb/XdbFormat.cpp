@@ -66,7 +66,7 @@ static bool IsSeparator(wchar_t c)
   return c == L'\\' || c == L'/';
 }
 
-bool PathToItemName(const UString &path, AString &name)
+HRESULT PathToItemName(const UString &path, AString &name)
 {
   UString s = path;
   s.Replace(L'/', L'\\');
@@ -76,16 +76,16 @@ bool PathToItemName(const UString &path, AString &name)
   while (start < s.Len() && IsSeparator(s[start]))
     start++;
   s.DeleteFrontal(start);
-  if (s.IsEmpty())
-    return false;
+  if (s.IsEmpty() || s.Find(L"\\\\") >= 0)
+    return k_hres_BadName;
 
   bool defaultCharUsed = false;
   name = UnicodeStringToMultiByte(s, kNameCodePage, '_', defaultCharUsed);
   if (defaultCharUsed)
-    return false;
+    return k_hres_NotInCodePage;
   // The engine looks names up in lowercase; only ASCII is folded, as in the original tools.
   name.MakeLower_Ascii();
-  return true;
+  return S_OK;
 }
 
 static int CompareIndicesByName(const unsigned *a, const unsigned *b, void *param)

@@ -35,14 +35,14 @@ HRESULT ReadStreamToBuffer(ISequentialInStream *stream, UInt64 sizeHint, CByteBu
     if (size == buf.Size())
     {
       if (size >= kMaxFileSize)
-        return E_FAIL;
+        return k_hres_TooLarge;
       buf.ChangeSize_KeepData(size * 2, size);
     }
     const size_t chunk = MyMin(buf.Size() - size, (size_t)1 << 30);
     UInt32 processed;
     RINOK(stream->Read((Byte *)buf + size, (UInt32)chunk, &processed))
     if (processed == 0)
-      return size <= kMaxFileSize ? S_OK : E_FAIL;
+      return size <= kMaxFileSize ? S_OK : k_hres_TooLarge;
     size += processed;
   }
 }
@@ -97,6 +97,82 @@ void AddMissingDirs(CObjectVector<CItem> &items)
   items = result;
 }
 
+// A name in CheckNames(): of an item, or of a folder above one.
+struct CNameUse
+{
+  AString Name;
+  unsigned Index; // of the item
+  bool IsFile;
+  bool IsParent;
+
+  int Compare(const CNameUse &other) const
+  {
+    const int res = strcmp(Name, other.Name);
+    return res != 0 ? res : MyCompare(Index, other.Index);
+  }
+};
+
+/*
+  A file can't share its name with another file or with a folder: the engine
+  would find only one of them. 7-Zip lets a rename go onto a used name, so this
+  refuses the update rather than drop a file. A folder listed twice (one renamed
+  onto another) is merged into the first.
+*/
+HRESULT CheckNames(CObjectVector<CUpdateItem> &items)
+{
+  CObjectVector<CNameUse> uses;
+  FOR_VECTOR (i, items)
+  {
+    AString name = items[i].Name;
+    name.MakeLower_Ascii();
+    for (int sep = name.Find('\\'); sep > 0; sep = name.Find('\\', (unsigned)sep + 1))
+    {
+      CNameUse &parent = uses.AddNew();
+      parent.Name.SetFrom(name, (unsigned)sep);
+      parent.Index = i;
+      parent.IsFile = false;
+      parent.IsParent = true;
+    }
+    CNameUse &use = uses.AddNew();
+    use.Name = name;
+    use.Index = i;
+    use.IsFile = !items[i].IsDir;
+    use.IsParent = false;
+  }
+  uses.Sort();
+
+  CBoolVector drop;
+  drop.ClearAndSetSize(items.Size());
+  FOR_VECTOR (i, drop)
+    drop[i] = false;
+  for (unsigned start = 0; start < uses.Size();)
+  {
+    unsigned end = start + 1;
+    const bool firstIsFile = uses[start].IsFile;
+    bool hasDir = !uses[start].IsFile && !uses[start].IsParent;
+    for (; end < uses.Size() && uses[end].Name == uses[start].Name; end++)
+    {
+      const CNameUse &use = uses[end];
+      if (use.IsFile || firstIsFile)
+        return k_hres_NameInUse;
+      if (!use.IsParent)
+      {
+        if (hasDir)
+          drop[use.Index] = true;
+        hasDir = true;
+      }
+    }
+    start = end;
+  }
+
+  CObjectVector<CUpdateItem> result;
+  FOR_VECTOR (i, items)
+    if (!drop[i])
+      result.Add(items[i]);
+  items = result;
+  return S_OK;
+}
+
 class CUpdater
 {
   IInStream *_inStream;
@@ -136,7 +212,7 @@ public:
 HRESULT CUpdater::WriteFileData(const Byte *data, size_t size, CItem &item)
 {
   if (size > kMaxFileSize)
-    return E_FAIL;
+    return k_hres_TooLarge;
   item.Offset = (UInt32)_out.GetPos();
   item.Size = (UInt32)size;
   item.Crc = CrcCalc(data, size);
@@ -166,7 +242,7 @@ HRESULT CUpdater::CopyStoredData(ISequentialInStream *stream, UInt64 maxSize, CI
   if (res != S_OK && res != S_FALSE)
     return res;
   if (copied > kMaxFileSize)
-    return E_FAIL;
+    return k_hres_TooLarge;
   item.Size = item.PackSize = (UInt32)copied;
   item.Crc = crcStream->GetCRC();
   item.CrcDefined = _info.HasCrc;
@@ -238,7 +314,7 @@ HRESULT CUpdater::AddItem(const CUpdateItem &ui, CItem &item, bool &skipped)
     // expected; S_OK means it would not fit into the archive.
     const HRESULT copyRes = CopyStoredData(fileStream, _out.GetRemainingSize(), item);
     if (copyRes == S_OK)
-      return E_FAIL;
+      return k_hres_TooLarge;
     if (copyRes != S_FALSE)
       return copyRes;
   }
@@ -349,7 +425,7 @@ HRESULT UpdateArchive(
 
   CObjectVector<CUpdateItem> items = updateItems;
   if (!options.KeepDuplicates)
-    RemoveDuplicateNames(items);
+    RINOK(CheckNames(items))
 
   CUpdater updater(inStream, inputItems, options, callback);
   return updater.Update(items, seekableStream);

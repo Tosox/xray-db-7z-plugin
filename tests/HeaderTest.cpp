@@ -308,7 +308,7 @@ TEST(Header, RejectsNameTooLongFor2947)
 TEST(ItemName, ConvertsCyrillicAndLowercasesAscii)
 {
   AString name;
-  ASSERT_TRUE(PathToItemName(UString(L"Конфиг\\Weapons/Файл.LTX"), name));
+  ASSERT_EQ(PathToItemName(UString(L"Конфиг\\Weapons/Файл.LTX"), name), S_OK);
   // CP1251: К=0xCA о=0xEE н=0xED ф=0xF4 и=0xE8 г=0xE3, Ф=0xD4 а=0xE0 й=0xE9 л=0xEB
   EXPECT_STREQ(name, "\xCA\xEE\xED\xF4\xE8\xE3\\weapons\\\xD4\xE0\xE9\xEB.ltx");
 
@@ -320,10 +320,11 @@ TEST(ItemName, ConvertsCyrillicAndLowercasesAscii)
 TEST(ItemName, StripsSeparatorsAndRejectsEmptyOrUnencodable)
 {
   AString name;
-  ASSERT_TRUE(PathToItemName(UString(L"\\gamedata\\"), name));
+  ASSERT_EQ(PathToItemName(UString(L"\\gamedata\\"), name), S_OK);
   EXPECT_STREQ(name, "gamedata");
-  EXPECT_FALSE(PathToItemName(UString(L"\\"), name));
-  EXPECT_FALSE(PathToItemName(UString(L"日本.ltx"), name));
+  EXPECT_EQ(PathToItemName(UString(L"\\"), name), k_hres_BadName);
+  EXPECT_EQ(PathToItemName(UString(L"a\\/b"), name), k_hres_BadName);
+  EXPECT_EQ(PathToItemName(UString(L"日本.ltx"), name), k_hres_NotInCodePage);
 }
 
 TEST(Version, FindByName)

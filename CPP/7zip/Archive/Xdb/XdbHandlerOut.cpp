@@ -145,9 +145,9 @@ static HRESULT ReadUserDataFile(const UString &path, CByteBuffer &data)
   NWindows::NFile::NIO::CInFile file;
   UInt64 size;
   if (!file.Open(us2fs(path)) || !file.GetLength(size))
-    return E_INVALIDARG;
+    return GetLastError_noZero_HRESULT();
   if (size > kMaxUserDataFileSize)
-    return E_INVALIDARG;
+    return k_hres_TooLarge;
   data.Alloc((size_t)size);
   size_t processed;
   if (!file.ReadFull(data, data.Size(), processed) || processed != data.Size())
@@ -271,7 +271,7 @@ static HRESULT ReadUserDataItem(IArchiveUpdateCallback *callback, UInt32 index, 
   {
     RINOK(ReadStreamToBuffer(stream, 0, buf, size))
     if (size > kMaxUserDataFileSize)
-      return E_INVALIDARG;
+      return k_hres_TooLarge;
   }
   userData.CopyFrom(buf, size);
   return callback->SetOperationResult(NUpdate::NOperationResult::kOK);
@@ -281,7 +281,7 @@ static HRESULT ReadUserDataItem(IArchiveUpdateCallback *callback, UInt32 index, 
 static HRESULT ReadArchivedFile(IInStream *stream, const CItem &item, CByteBuffer &data)
 {
   if (item.Size > kMaxUserDataFileSize)
-    return E_INVALIDARG;
+    return k_hres_TooLarge;
   CByteBuffer packed(item.PackSize);
   RINOK(InStream_SeekSet(stream, item.Offset))
   RINOK(ReadStream_FAIL(stream, packed, packed.Size()))
@@ -409,8 +409,13 @@ Z7_COM7F_IMF(CHandler::UpdateItems(ISequentialOutStream *outStream, UInt32 numIt
       }
     }
 
-    if (ui.Name.IsEmpty() && !PathToItemName(path, ui.Name))
-      return E_INVALIDARG;
+    if (ui.Name.IsEmpty())
+    {
+      // A file renamed to an empty name arrives as its folder's path.
+      if (!ui.IsDir && (path.IsEmpty() || path.Back() == L'\\' || path.Back() == L'/'))
+        return k_hres_BadName;
+      RINOK(PathToItemName(path, ui.Name))
+    }
     if (ui.NewData && !ui.IsDir)
     {
       RINOK(GetSizeProp(callback, i, ui.Size))

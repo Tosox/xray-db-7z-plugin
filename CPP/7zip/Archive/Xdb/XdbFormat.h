@@ -28,6 +28,12 @@ const unsigned kChunkHeaderSize = 8; // UInt32 id, UInt32 size
 // Names are stored in the Windows Cyrillic code page.
 const unsigned kNameCodePage = 1251;
 
+// Update errors that 7-Zip shows with a message naming the problem.
+const HRESULT k_hres_TooLarge = HRESULT_FROM_WIN32(ERROR_FILE_TOO_LARGE);         // past a 4 GiB field
+const HRESULT k_hres_BadName = HRESULT_FROM_WIN32(ERROR_INVALID_NAME);            // empty name or part
+const HRESULT k_hres_NotInCodePage = HRESULT_FROM_WIN32(ERROR_NO_UNICODE_TRANSLATION);
+const HRESULT k_hres_NameInUse = HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS);
+
 enum EVersion
 {
   kVersion_11xx,
@@ -101,9 +107,10 @@ struct CItem
 /*
   Converts a path from an update callback to the stored form: CP1251,
   ASCII-lowercase, '\' separators, no leading or trailing separators.
-  Returns false if the path is empty or has characters that CP1251 lacks.
+  Fails with k_hres_BadName for an empty path or an empty part ("a\\b"), and
+  with k_hres_NotInCodePage for characters that CP1251 lacks.
 */
-bool PathToItemName(const UString &path, AString &name);
+HRESULT PathToItemName(const UString &path, AString &name);
 
 /*
   Finds names that occur more than once (ASCII case-insensitively). Of each

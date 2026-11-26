@@ -72,6 +72,7 @@ edit it with F4, replace it by adding or renaming a file to that name, rename it
 - Writing to standard output (`-so`) is not supported: the archive's size fields are filled in after the files are written.
 - Archives are limited to 4 GiB by the format.
 - File names must be representable in the Windows Cyrillic code page (CP1251), like the game expects.
+- A file can't share its name with another file or a folder; a rename or copy that would cause this is refused.
 
 ## 🛠 Build
 

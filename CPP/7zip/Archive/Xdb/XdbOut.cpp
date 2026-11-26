@@ -32,7 +32,7 @@ HRESULT COutArchive::WriteChunkHeader(UInt32 id, UInt32 size)
 HRESULT COutArchive::WriteChunk(UInt32 id, const Byte *data, size_t size)
 {
   if (size > GetRemainingSize() || GetRemainingSize() - size < kChunkHeaderSize)
-    return E_FAIL;
+    return k_hres_TooLarge;
   RINOK(WriteChunkHeader(id, (UInt32)size))
   return WriteData(data, size);
 }
@@ -46,7 +46,7 @@ HRESULT COutArchive::BeginDataChunk()
 HRESULT COutArchive::WriteData(const void *data, size_t size)
 {
   if (size > GetRemainingSize())
-    return E_FAIL;
+    return k_hres_TooLarge;
   RINOK(WriteStream(_stream, data, size))
   _pos += size;
   return S_OK;
@@ -57,7 +57,7 @@ HRESULT COutArchive::CopyData(ISequentialInStream *inStream, UInt64 size, ICompr
 {
   copied = 0;
   if (size > GetRemainingSize())
-    return E_FAIL;
+    return k_hres_TooLarge;
   CMyComPtr2_Create<ISequentialInStream, CLimitedSequentialInStream> limitedStream;
   limitedStream->SetStream(inStream);
   limitedStream->Init(size);

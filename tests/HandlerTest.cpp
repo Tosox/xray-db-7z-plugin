@@ -239,7 +239,7 @@ TEST(Properties, RejectsUnknownOrInvalid)
   EXPECT_EQ(SetOne(L"compress", CPropVariant(L"sometimes")), E_INVALIDARG);
   EXPECT_EQ(SetOne(L"xfoo", CPropVariant(L"1")), E_INVALIDARG);
   EXPECT_EQ(SetOne(L"level", CPropVariant(L"1")), E_INVALIDARG);
-  EXPECT_EQ(SetOne(L"xdb_ud", CPropVariant(L"C:\\does\\not\\exist.ltx")), E_INVALIDARG);
+  EXPECT_EQ(SetOne(L"xdb_ud", CPropVariant(L"C:\\does\\not\\exist.ltx")), HRESULT_FROM_WIN32(ERROR_PATH_NOT_FOUND));
 }
 
 class UserDataFile : public testing::Test
