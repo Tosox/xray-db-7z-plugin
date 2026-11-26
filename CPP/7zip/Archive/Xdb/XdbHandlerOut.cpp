@@ -44,26 +44,6 @@ void COptions::Init()
   UserData.Free();
 }
 
-// Accepts 7-Zip's on/off/+/- and, for command lines written for v0.1.0, true/false.
-static HRESULT ParseBool(const PROPVARIANT &value, bool &result)
-{
-  if (value.vt == VT_BSTR)
-  {
-    const UString s = value.bstrVal;
-    if (s.IsEqualTo_Ascii_NoCase("true"))
-    {
-      result = true;
-      return S_OK;
-    }
-    if (s.IsEqualTo_Ascii_NoCase("false"))
-    {
-      result = false;
-      return S_OK;
-    }
-  }
-  return PROPVARIANT_to_bool(value, result);
-}
-
 static HRESULT ParseVersion(const PROPVARIANT &value, COptions &options)
 {
   UString name;
@@ -93,7 +73,7 @@ static HRESULT ParseCompressMode(const PROPVARIANT &value, ECompressMode &mode)
     return S_OK;
   }
   bool compress;
-  RINOK(ParseBool(value, compress))
+  RINOK(PROPVARIANT_to_bool(value, compress))
   mode = compress ? kCompressMode_Always : kCompressMode_Never;
   return S_OK;
 }
@@ -199,11 +179,11 @@ Z7_COM7F_IMF(CHandler::SetProperties(const wchar_t * const *names, const PROPVAR
     }
     else if (name == L"keepdups")
     {
-      RINOK(ParseBool(value, _options.KeepDuplicates))
+      RINOK(PROPVARIANT_to_bool(value, _options.KeepDuplicates))
     }
     else if (name == L"gen_xdb_ud")
     {
-      RINOK(ParseBool(value, _options.GenerateUserData))
+      RINOK(PROPVARIANT_to_bool(value, _options.GenerateUserData))
     }
     else if (name == L"xdb_ud")
     {

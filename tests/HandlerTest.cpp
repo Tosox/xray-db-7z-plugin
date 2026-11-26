@@ -220,7 +220,7 @@ TEST(Properties, AcceptsKnownValues)
   EXPECT_EQ(SetOne(L"dbver", CPropVariant((UInt32)2945)), S_OK);
   EXPECT_EQ(SetOne(L"compress", CPropVariant(L"auto")), S_OK);
   EXPECT_EQ(SetOne(L"compress", CPropVariant(L"off")), S_OK);
-  EXPECT_EQ(SetOne(L"compress", CPropVariant(L"true")), S_OK);
+  EXPECT_EQ(SetOne(L"compress", CPropVariant(L"ON")), S_OK);
   EXPECT_EQ(SetOne(L"gen_xdb_ud", CPropVariant(L"-")), S_OK);
   EXPECT_EQ(SetOne(L"keepdups", CPropVariant()), S_OK); // "keepdups" alone means on
 }
@@ -237,6 +237,7 @@ TEST(Properties, RejectsUnknownOrInvalid)
   using NWindows::NCOM::CPropVariant;
   EXPECT_EQ(SetOne(L"dbver", CPropVariant(L"2946")), E_INVALIDARG);
   EXPECT_EQ(SetOne(L"compress", CPropVariant(L"sometimes")), E_INVALIDARG);
+  EXPECT_EQ(SetOne(L"gen_xdb_ud", CPropVariant(L"false")), E_INVALIDARG); // on/off, as in 7-Zip
   EXPECT_EQ(SetOne(L"xfoo", CPropVariant(L"1")), E_INVALIDARG);
   EXPECT_EQ(SetOne(L"level", CPropVariant(L"1")), E_INVALIDARG);
   EXPECT_EQ(SetOne(L"xdb_ud", CPropVariant(L"C:\\does\\not\\exist.ltx")), HRESULT_FROM_WIN32(ERROR_PATH_NOT_FOUND));

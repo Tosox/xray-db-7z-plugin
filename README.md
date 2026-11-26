@@ -49,8 +49,6 @@ With the [Tosox/7zip](https://github.com/Tosox/7zip) fork, the **Format options.
 | `gen_xdb_ud` | `on`, `off` | `on` | Give new `xdb` archives (and archives converted to `xdb`) a default `[header]` userdata block. |
 | `keepdups` | `on`, `off` | `off` | Keep all entries of damaged archives that list the same path more than once. By default only the last one is kept. |
 
-`true`/`false` are accepted in place of `on`/`off`.
-
 Examples:
 - **Parameters** field: `compress=off xdb_ud="D:\Mods\my mod\userdata.ltx"`
 - `7z a mymod.db0 .\gamedata\* -txdb`
