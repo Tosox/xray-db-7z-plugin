@@ -10,7 +10,9 @@
 #include "Windows/PropVariant.h"
 
 #include "7zip/Common/MethodProps.h"
+#include "7zip/Common/StreamUtils.h"
 
+#include "XdbCodec.h"
 #include "XdbHandler.h"
 #include "XdbUpdate.h"
 
@@ -275,6 +277,17 @@ static HRESULT ReadUserDataItem(IArchiveUpdateCallback *callback, UInt32 index, 
   return callback->SetOperationResult(NUpdate::NOperationResult::kOK);
 }
 
+// The contents of a file of the open archive, for a file renamed to the userdata name.
+static HRESULT ReadArchivedFile(IInStream *stream, const CItem &item, CByteBuffer &data)
+{
+  if (item.Size > kMaxUserDataFileSize)
+    return E_INVALIDARG;
+  CByteBuffer packed(item.PackSize);
+  RINOK(InStream_SeekSet(stream, item.Offset))
+  RINOK(ReadStream_FAIL(stream, packed, packed.Size()))
+  return UnpackItemData(item.Method, packed, packed.Size(), item.Size, data) ? S_OK : S_FALSE;
+}
+
 // "compress=auto" follows the archive being updated.
 static bool MostFilesAreCompressed(const CObjectVector<CItem> &items)
 {
@@ -313,6 +326,7 @@ Z7_COM7F_IMF(CHandler::UpdateItems(ISequentialOutStream *outStream, UInt32 numIt
 
   CObjectVector<CUpdateItem> updateItems;
   bool userDataInList = false;
+  bool userDataChanged = false;
   CByteBuffer userDataFromList;
 
   for (UInt32 i = 0; i < numItems; i++)
@@ -349,25 +363,50 @@ Z7_COM7F_IMF(CHandler::UpdateItems(ISequentialOutStream *outStream, UInt32 numIt
       ui.IsDir = item.IsDir;
     }
 
-    // In an xdb archive, the userdata file is the userdata chunk.
-    if (isXdb && !ui.IsDir && (ui.NewData || fromUserDataItem) && path.IsEqualTo_Ascii_NoCase(kUserDataItemName))
+    /*
+      In an xdb archive, the userdata file is the userdata chunk: the shown
+      userdata item, and any file added or renamed to its name. A real file
+      that already had the name and is left alone stays a file. Added or
+      renamed contents win over the unchanged userdata, as they replace it.
+    */
+    const bool renamed = inArc && !fromUserDataItem && IntToBool(newProps);
+    if (isXdb && !ui.IsDir && (ui.NewData || renamed || fromUserDataItem) && path.IsEqualTo_Ascii_NoCase(kUserDataItemName))
     {
-      userDataInList = true;
       if (ui.NewData)
       {
         RINOK(ReadUserDataItem(callback, i, userDataFromList))
+        userDataChanged = true;
       }
-      else
+      else if (renamed)
+      {
+        const HRESULT res = ReadArchivedFile(_stream, _arc.Items[indexInArc], userDataFromList);
+        if (res != S_OK)
+          return res == S_FALSE ? E_FAIL : res;
+        userDataChanged = true;
+      }
+      else if (!userDataChanged)
         userDataFromList = _arc.UserData;
+      userDataInList = true;
       continue;
     }
 
     if (fromUserDataItem)
     {
-      // Without new contents there is nothing to store under another name,
-      // and other versions have no userdata.
-      if (!ui.NewData || !isXdb)
-        continue;
+      if (ui.NewData)
+      {
+        // Other versions have no userdata.
+        if (!isXdb)
+          continue;
+      }
+      else
+      {
+        // Kept under its name for another version: dropped, as that has no
+        // userdata. Renamed: a file with the userdata's contents.
+        if (!IntToBool(newProps) || path.IsEqualTo_Ascii_NoCase(kUserDataItemName))
+          continue;
+        ui.DataInBuffer = true;
+        ui.Data = _arc.UserData;
+      }
     }
 
     if (ui.Name.IsEmpty() && !PathToItemName(path, ui.Name))

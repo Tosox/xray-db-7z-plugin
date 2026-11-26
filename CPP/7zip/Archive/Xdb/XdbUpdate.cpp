@@ -275,6 +275,8 @@ HRESULT CUpdater::Update(const CObjectVector<CUpdateItem> &updateItems, IOutStre
     const CUpdateItem &ui = updateItems[i];
     if (ui.NewData)
       totalSize += ui.Size;
+    else if (ui.DataInBuffer)
+      totalSize += ui.Data.Size();
     else if (ui.IndexInArc >= 0)
       totalSize += _inputItems[(unsigned)ui.IndexInArc].PackSize;
   }
@@ -307,6 +309,11 @@ HRESULT CUpdater::Update(const CObjectVector<CUpdateItem> &updateItems, IOutStre
         if (skipped)
           continue;
         completed += ui.Size;
+      }
+      else if (ui.DataInBuffer)
+      {
+        RINOK(WriteFileData(ui.Data, ui.Data.Size(), item))
+        completed += ui.Data.Size();
       }
       else
       {

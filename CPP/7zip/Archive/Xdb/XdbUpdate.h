@@ -19,14 +19,17 @@ struct CUpdateItem
   UInt32 IndexInClient;   // index for IArchiveUpdateCallback
   bool NewData;           // read the contents from the callback, not the archive
   bool IsDir;
+  bool DataInBuffer;      // the contents are (Data): the userdata renamed to a file
   AString Name;           // stored form, see PathToItemName()
   UInt64 Size;            // of new data, if known (for progress and buffering)
+  CByteBuffer Data;
 
   CUpdateItem():
       IndexInArc(-1),
       IndexInClient(0),
       NewData(false),
       IsDir(false),
+      DataInBuffer(false),
       Size(0)
       {}
 };

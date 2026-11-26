@@ -447,6 +447,47 @@ TEST_F(UserDataUpdate, AddingTheFileSetsUserData)
   EXPECT_EQ(result.Items.Size(), Files.size());
 }
 
+TEST_F(UserDataUpdate, RenamingAFileToTheNameSetsUserData)
+{
+  COpened arc(BuildArchive(kVersion_Xdb, Files)); // no userdata yet
+  std::vector<CUpdateEntry> entries = KeepFiles();
+  entries[1] = Rename(1, L"[userdata].ltx");       // config\system.ltx, compressed
+  CBytes bytes;
+  ASSERT_EQ(RunUpdate(arc.Handler, entries, bytes), S_OK);
+  const CInArchive result = ReadArchive(bytes);
+  ASSERT_TRUE(result.UserDataDefined);
+  EXPECT_EQ(ToBytes(result.UserData), Files[1].Data);
+  EXPECT_EQ(result.Items.Size(), Files.size() - 1);
+}
+
+TEST_F(UserDataUpdate, RenamingOntoTheUserDataReplacesIt)
+{
+  COpened arc(BuildWithUserData());
+  std::vector<CUpdateEntry> entries = KeepFiles();
+  entries[1] = Rename(1, L"[userdata].ltx");
+  entries.push_back(Keep(UserDataIndex));          // the old one comes later, and still loses
+  CBytes bytes;
+  ASSERT_EQ(RunUpdate(arc.Handler, entries, bytes), S_OK);
+  const CInArchive result = ReadArchive(bytes);
+  EXPECT_EQ(ToBytes(result.UserData), Files[1].Data);
+  EXPECT_EQ(result.Items.Size(), Files.size() - 1);
+}
+
+TEST_F(UserDataUpdate, RenamingTheUserDataKeepsItAsAFile)
+{
+  COpened arc(BuildWithUserData());
+  std::vector<CUpdateEntry> entries = KeepFiles();
+  entries.push_back(Rename(UserDataIndex, L"notes.ltx"));
+  CBytes bytes;
+  ASSERT_EQ(RunUpdate(arc.Handler, entries, bytes), S_OK);
+  const CInArchive result = ReadArchive(bytes);
+  EXPECT_FALSE(result.UserDataDefined);
+  ASSERT_EQ(result.Items.Size(), Files.size() + 1);
+  EXPECT_STREQ(result.Items[(unsigned)Files.size()].Name, "notes.ltx");
+  COpened renamed(bytes);
+  EXPECT_EQ(renamed.ExtractAll().Data[(UInt32)Files.size()], UserData);
+}
+
 TEST_F(UserDataUpdate, ConvertingToOtherVersionsDropsUserData)
 {
   COpened arc(BuildWithUserData());

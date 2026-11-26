@@ -60,7 +60,7 @@ Examples:
 ### Userdata
 
 `xdb` archives can carry a userdata block, usually an LTX `[header]` section that describes a mod. It appears as `[userdata].ltx` at the top of the archive:
-edit it with F4, replace it by adding a file with that name, or delete it to remove the block. An `xdb_ud` parameter always takes precedence.
+edit it with F4, replace it by adding or renaming a file to that name, rename it to keep its contents as an ordinary file, or delete it to remove the block. An `xdb_ud` parameter always takes precedence.
 
 ### What 7-Zip shows
 
