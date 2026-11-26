@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://github.com/Tosox/xray-db-7z-plugin/actions/workflows/build.yml"><img src="https://github.com/Tosox/xray-db-7z-plugin/actions/workflows/build.yml/badge.svg" alt="Build"></a>
-  <a href="https://github.com/Tosox/xray-db-7z-plugin/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="https://github.com/Tosox/xray-db-7z-plugin/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-GPLv3-blue.svg" alt="License: GPL v3"></a>
   <a href="https://github.com/Tosox/xray-db-7z-plugin/releases"><img src="https://img.shields.io/github/downloads/Tosox/xray-db-7z-plugin/total.svg?label=downloads&color=green" alt="Downloads"></a>
   <img src="https://img.shields.io/badge/platform-Windows-0078D6.svg" alt="Platform: Windows">
 </p>
@@ -111,7 +111,7 @@ edit it with F4, replace it by adding a file with that name, or delete it to rem
 
 ## 📄 License
 
-* Plugin-specific code: MIT (see `LICENSE`)
+* Plugin-specific code: GNU GPL v3 or later (see `LICENSE`)
 * Third-party code keeps its own licenses (see `NOTICE`)
 
 ---

@@ -1,3 +1,11 @@
+xray-db-7z-plugin
+Copyright (C) 2026 Tosox
+
+This program is free software: you can redistribute it and/or modify it
+under the terms of the GNU General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option)
+any later version. See LICENSE.
+
 The plugin binaries contain the following third-party code:
 
 - 7-Zip (third_party/7zip), by Igor Pavlov, primarily under the GNU LGPL
@@ -10,7 +18,8 @@ The plugin binaries contain the following third-party code:
 - LZHUF (CPP/7zip/Archive/Xdb/XdbLzhuf.cpp), a port of LZHUF.C
   (c) 1989 by Haruyasu Yoshizaki, Haruhiko Okumura and Kenji Rikitake:
   "All rights reserved. Permission granted for non-commercial use."
-  This restriction applies to that component.
+  This restriction applies to that component. It is not covered by the
+  GPL, and its notice is kept as it is.
 
 The format knowledge (docs/db-format.md), the header cipher and the LZHUF
 port are based on xray_re-tools by bardak (setback),
