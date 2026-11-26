@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(xdb_plugin LANGUAGES C CXX)
+project(xdb_plugin VERSION 1.0.0 LANGUAGES C CXX)
 
 option(XDB_BUILD_TESTS "Build the unit tests" ON)
 
@@ -129,16 +129,24 @@ endif()
 
 # --- Plugin DLL -------------------------------------------------------------
 
+if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+  set(XDB_DLL_NAME XDB_x64)
+else()
+  set(XDB_DLL_NAME XDB_x86)
+endif()
+configure_file(${XDB_DIR}/Xdb.rc.in ${CMAKE_BINARY_DIR}/Xdb.rc @ONLY)
+
 add_library(Xdb SHARED
   ${XDB_DIR}/XdbRegister.cpp
   ${XDB_DIR}/Xdb.def
+  ${CMAKE_BINARY_DIR}/Xdb.rc
   ${Z7_ROOT}/CPP/7zip/Archive/ArchiveExports.cpp
   ${Z7_ROOT}/CPP/7zip/Archive/DllExports2.cpp
 )
 target_link_libraries(Xdb PRIVATE xdb_core)
 
 set_target_properties(Xdb PROPERTIES
-  OUTPUT_NAME "XDB_$<IF:$<EQUAL:${CMAKE_SIZEOF_VOID_P},8>,x64,x86>"
+  OUTPUT_NAME ${XDB_DLL_NAME}
   RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
 )
 

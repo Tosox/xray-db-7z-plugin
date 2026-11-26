@@ -42,7 +42,8 @@ target_link_libraries(xdb_tests PRIVATE xdb_core xray_re_reference GTest::gtest_
 
 # The smoke test loads the real plugin DLL.
 add_dependencies(xdb_tests Xdb)
-target_compile_definitions(xdb_tests PRIVATE XDB_PLUGIN_PATH="$<TARGET_FILE:Xdb>")
+target_compile_definitions(xdb_tests PRIVATE XDB_PLUGIN_PATH="$<TARGET_FILE:Xdb>" XDB_VERSION="${PROJECT_VERSION}")
+target_link_libraries(xdb_tests PRIVATE version)
 
 include(GoogleTest)
 gtest_discover_tests(xdb_tests DISCOVERY_MODE PRE_TEST)

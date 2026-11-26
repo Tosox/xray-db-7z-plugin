@@ -55,6 +55,23 @@ TEST_F(PluginDll, ExportsArchiveEntryPoints)
     EXPECT_NE(Get(name), nullptr) << name;
 }
 
+// What Explorer shows in the DLL's properties, from Xdb.rc.in.
+TEST(PluginFile, CarriesTheProjectVersion)
+{
+  DWORD handle = 0;
+  const DWORD size = GetFileVersionInfoSizeA(XDB_PLUGIN_PATH, &handle);
+  ASSERT_NE(size, 0u);
+  std::string info(size, '\0');
+  ASSERT_TRUE(GetFileVersionInfoA(XDB_PLUGIN_PATH, 0, size, &info[0]));
+
+  const char *value = nullptr;
+  UINT len = 0;
+  ASSERT_TRUE(VerQueryValueA(&info[0], "\\StringFileInfo\\040904B0\\FileVersion", (void **)&value, &len));
+  EXPECT_STREQ(value, XDB_VERSION);
+  ASSERT_TRUE(VerQueryValueA(&info[0], "\\StringFileInfo\\040904B0\\ProductName", (void **)&value, &len));
+  EXPECT_STREQ(value, "Xray DB 7z Plugin");
+}
+
 // Read by the Tosox/7zip fork; the name must be undecorated, also on Win32.
 TEST_F(PluginDll, ExportsFormatOptions)
 {
