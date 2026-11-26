@@ -225,6 +225,16 @@ TEST(Properties, AcceptsKnownValues)
   EXPECT_EQ(SetOne(L"keepdups", CPropVariant()), S_OK); // "keepdups" alone means on
 }
 
+// 7-Zip before 22.00 fails every update when this isn't a time type it knows.
+TEST(Properties, FileTimeTypeSuitsOld7Zip)
+{
+  CMyComPtr<IOutArchive> out;
+  ASSERT_EQ(CreateHandler()->QueryInterface(IID_IOutArchive, (void **)&out), S_OK);
+  UInt32 type = 0;
+  ASSERT_EQ(out->GetFileTimeType(&type), S_OK);
+  EXPECT_LE(type, (UInt32)NFileTimeType::kDOS);
+}
+
 TEST(Properties, IgnoresGenericProperties)
 {
   using NWindows::NCOM::CPropVariant;

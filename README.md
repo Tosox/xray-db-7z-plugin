@@ -34,6 +34,8 @@ edit it in place, convert it between versions, and pack your mod into a new one.
    - `XDB_x86.dll` only if you explicitly run 32‑bit 7‑Zip
 3) Copy the DLL into your 7‑Zip `Formats` directory (e.g., `C:\Program Files\7-Zip\Formats`). Create the `Formats` folder if it isn’t there.  
 
+Works with 7‑Zip 19.00 and later.
+
 ## 🧭 Usage in 7‑Zip
 
 ### Parameters

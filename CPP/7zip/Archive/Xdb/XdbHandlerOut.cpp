@@ -201,7 +201,9 @@ Z7_COM7F_IMF(CHandler::SetProperties(const wchar_t * const *names, const PROPVAR
 
 Z7_COM7F_IMF(CHandler::GetFileTimeType(UInt32 *type))
 {
-  *type = (UInt32)(Int32)NFileTimeType::kNotDefined;
+  // The archives store no times. 7-Zip before 22.00 fails an update on kNotDefined;
+  // this is the value 7-Zip's own handlers use in that case.
+  *type = GET_FileTimeType_NotDefined_for_GetFileTimeType;
   return S_OK;
 }
 
