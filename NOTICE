@@ -8,12 +8,12 @@ any later version. See LICENSE.
 
 The plugin binaries contain the following third-party code:
 
-- 7-Zip (third_party/7zip), by Igor Pavlov, primarily under the GNU LGPL
-  v2.1 or later, with BSD-licensed files and an unRAR license restriction
-  for RAR code. See third_party/7zip/DOC/License.txt and unRarLicense.txt.
+- 7-Zip (third_party/7zip), by Igor Pavlov, under the GNU LGPL v2.1 or
+  later. The plugin uses none of 7-Zip's RAR, LZFSE or Zstandard code, so
+  their additional terms don't apply. See licenses/7zip-License.txt.
 
 - lzokay (third_party/lzokay), by Jack Andersen, under the MIT license.
-  See third_party/lzokay/LICENSE. Used for LZO1X compression.
+  See licenses/lzokay-LICENSE.txt. Used for LZO1X compression.
 
 - LZHUF (CPP/7zip/Archive/Xdb/XdbLzhuf.cpp), a port of LZHUF.C
   (c) 1989 by Haruyasu Yoshizaki, Haruhiko Okumura and Kenji Rikitake:
@@ -23,7 +23,7 @@ The plugin binaries contain the following third-party code:
 
 The format knowledge (docs/db-format.md), the header cipher and the LZHUF
 port are based on xray_re-tools by bardak (setback),
-http://xray.codeplex.com/, mirrored at
+http://xray.codeplex.com/ (closed), mirrored at
 https://github.com/abramcumner/xray_re-tools. The original project does not
 provide a standard open-source license; its permission statement reads:
 "you can do whatever you want, just do not say you wrote it."
