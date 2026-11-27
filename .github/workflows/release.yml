@@ -4,15 +4,52 @@ on:
   workflow_dispatch:
     inputs:
       build-ver:
-        description: Build version (tag)
+        description: Build version (tag), e.g. v1.0.0
         required: true
-        default: v0.0.0
 
 env:
   PLUGIN_NAME: xray-db-7z-plugin
 
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Only from master
+        if: github.ref_name != 'master'
+        run: |
+          echo "::error::releases are made from master, not ${{ github.ref_name }}"
+          exit 1
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Tag matches the version in CMakeLists.txt
+        run: |
+          version=$(sed -n 's/^project(xdb_plugin VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          if [ "v$version" != "${{ github.event.inputs.build-ver }}" ]; then
+            echo "::error::the tag ${{ github.event.inputs.build-ver }} doesn't match version $version in CMakeLists.txt"
+            exit 1
+          fi
+
+      # The release body is the tag's section of CHANGELOG.md: from "## <tag>" to the next "## ".
+      - name: Release notes from CHANGELOG.md
+        run: |
+          tag="${{ github.event.inputs.build-ver }}"
+          awk -v h="## $tag" '$0 == h || index($0, h " ") == 1 { found = 1; next } /^## / { found = 0 } found' CHANGELOG.md > release-notes.md
+          if ! grep -q '[^[:space:]]' release-notes.md; then
+            echo "::error::CHANGELOG.md has no section for $tag"
+            exit 1
+          fi
+
+      - name: Keep the release notes
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: release-notes.md
+          retention-days: 1
+
   build:
+    needs: check
     uses: ./.github/workflows/build.yml
 
   release:
@@ -33,18 +70,16 @@ jobs:
         with:
           path: artifact
 
+      # Exact names, so that a missing file fails the release instead of leaving it out.
       - name: Create release zip
         run: |
-          mkdir -p release/bin
-          cp -a artifact/XDB_x64/*.dll release/bin/ || true
-          cp -a artifact/XDB_Win32/*.dll release/bin/ || true
-          cp LICENSE NOTICE release/ || true
-          mkdir -p release/licenses
-          cp third_party/7zip/DOC/License.txt release/licenses/7zip-License.txt || true
-          cp third_party/lzokay/LICENSE release/licenses/lzokay-LICENSE.txt || true
+          mkdir -p release/bin release/licenses
+          cp artifact/XDB_x64/XDB_x64.dll artifact/XDB_Win32/XDB_x86.dll release/bin/
+          cp LICENSE NOTICE release/
+          cp third_party/7zip/DOC/License.txt release/licenses/7zip-License.txt
+          cp third_party/lzokay/LICENSE release/licenses/lzokay-LICENSE.txt
           cd release
           zip -r ../${{ env.PLUGIN_NAME }}-${{ github.event.inputs.build-ver }}.zip .
-          cd ..
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
@@ -53,6 +88,7 @@ jobs:
         with:
           tag_name: ${{ github.event.inputs.build-ver }}
           name: ${{ github.event.inputs.build-ver }}
+          body_path: artifact/release-notes/release-notes.md
           files: |
             ${{ env.PLUGIN_NAME }}-${{ github.event.inputs.build-ver }}.zip
           draft: false
