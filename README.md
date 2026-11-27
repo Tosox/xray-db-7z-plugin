@@ -1,7 +1,7 @@
 <h1 align="center">Xray DB 7z Plugin</h1>
 
 <p align="center">
-  Open, edit and create S.T.A.L.K.E.R. game archives directly in 7-Zip.
+  Open, edit and pack S.T.A.L.K.E.R. game archives in 7-Zip.
 </p>
 
 <p align="center">
@@ -11,105 +11,72 @@
   <img src="https://img.shields.io/badge/platform-Windows-0078D6.svg" alt="Platform: Windows">
 </p>
 
-S.T.A.L.K.E.R. stores its game data in `.db` archives, in six different versions across the X-Ray
-engine's history. Working with them usually means separate unpacker tools and command lines for
-each version. This plugin teaches 7-Zip the format instead: browse and extract any game archive,
-edit it in place, convert it between versions, and pack your mod into a new one.
+<p align="center">
+  <img src="docs/images/archive.png" alt="A mod archive opened in 7-Zip" width="800">
+</p>
 
-## 📋 Features
+S.T.A.L.K.E.R. keeps its game data in `.db` archives. With this plugin, 7-Zip opens them like
+any zip file: browse and extract, drag files in, rename or delete them, or edit a config or
+script and save it straight back. The archive is updated in place, with no unpacking and
+repacking.
 
-- Open, extract, test and create S.T.A.L.K.E.R. DB archives directly in 7-Zip
-- All archive versions: `xdb` (Clear Sky, Call of Pripyat), `2947ww` and `2947ru` (Shadow of Chernobyl), `2945`, `2215` and `11xx` (builds 1114–1472)
-- Edit archives in place: add, replace, rename and delete files and folders
-- Convert archives between versions
-- The version is detected from the archive's contents, not its extension
-- The userdata block of `xdb` archives appears as the file `[userdata].ltx`
-- Progress and cancel for large archives; files are processed one at a time, so memory use stays low
+## 🎮 Supported games
+
+| Game | Archive version |
+|---|---|
+| Clear Sky, Call of Pripyat, Anomaly and most mods | `xdb` |
+| Shadow of Chernobyl (worldwide), Lost Alpha | `2947ww` |
+| Shadow of Chernobyl (Russian) | `2947ru` |
+| Early builds 1114–2945 | `11xx`, `2215`, `2945` |
+
+The version is detected from the archive itself, so renamed archives open too. `xdb` and
+`2947ww` archives the plugin writes are tested by loading them in eight games, from Shadow of
+Chernobyl to Anomaly. The other versions are checked against reference tools, not yet in a game.
 
 ## 📦 Installation
 
-1) Download the latest release zip from GitHub
-2) Pick the DLL that matches your 7‑Zip install:  
-   - `XDB_x64.dll` for 64‑bit 7‑Zip (most installs)
-   - `XDB_x86.dll` only if you explicitly run 32‑bit 7‑Zip
-3) Copy the DLL into your 7‑Zip `Formats` directory (e.g., `C:\Program Files\7-Zip\Formats`). Create the `Formats` folder if it isn’t there.  
+1. Download the latest zip from [Releases](https://github.com/Tosox/xray-db-7z-plugin/releases).
+2. Copy `XDB_x64.dll` into 7-Zip's `Formats` folder, for example `C:\Program Files\7-Zip\Formats`.
+   Create the folder if it isn't there. Use `XDB_x86.dll` for 32-bit 7-Zip.
+3. Open any `.db*` or `.xdb*` archive, for example with right-click → **7-Zip** → **Open archive**.
 
-Works with 7‑Zip 19.00 and later.
+Works with 7-Zip 19.00 and later.
 
-## 🧭 Usage in 7‑Zip
+## 🛠️ Packing a mod
 
-### Parameters
+Select the **contents** of your mod's `gamedata` folder, not the folder itself, then
+**Add to archive...** and choose the **xdb** format. The archive is compressed like the game's
+own.
 
-Type them into the **Parameters** field of the *Add to Archive* dialog, or pass them with `-m` on the command line.
-With the [Tosox/7zip](https://github.com/Tosox/7zip) fork, the **Format options...** button next to the field shows them as regular controls.
+For another game version or no compression, type options into **Parameters**, for example
+`dbver=2947ww compress=off`. The [usage guide](docs/usage.md#parameters) lists them all.
 
-| Parameter | Values | Default | Meaning |
-|-----------|--------|---------|---------|
-| `dbver` | `auto`, `xdb`, `2947ww`, `2947ru`, `2945`, `2215`, `11xx` | `auto` | Version to write. `auto` keeps the version of an existing archive and uses `xdb` for new ones. Reading always detects the version. |
-| `compress` | `auto`, `on`, `off` | `auto` | Compress new files. `auto` follows the archive being updated (compress if most of its files are compressed); new archives are compressed. |
-| `xdb_ud` | path to a file | – | Use the file's contents as the userdata block (`xdb` only). Quote paths with spaces: `xdb_ud="D:\My Mods\userdata.ltx"`. |
-| `gen_xdb_ud` | `on`, `off` | `on` | Give new `xdb` archives (and archives converted to `xdb`) a default `[header]` userdata block. |
-| `keepdups` | `on`, `off` | `off` | Keep all entries of damaged archives that list the same path more than once. By default only the last one is kept. |
+> [!TIP]
+> With [Tosox/7zip](https://github.com/Tosox/7zip), a 7-Zip with one addition for plugins,
+> **Format options...** shows these options as dropdowns instead. It installs over your 7-Zip
+> like the official setup.
 
-Examples:
-- **Parameters** field: `compress=off xdb_ud="D:\Mods\my mod\userdata.ltx"`
-- `7z a mymod.db0 .\gamedata\* -txdb`
-- `7z a mymod.db0 .\gamedata\* -txdb -mdbver=2947ww -mcompress=off`
-- `7z u old_build.db -txdb -mdbver=xdb` converts an archive to `xdb`
+| Stock 7-Zip | Tosox/7zip |
+|:-:|:-:|
+| <img src="docs/images/add-stock.png" alt="The Add dialog of stock 7-Zip" width="400"> | <img src="docs/images/add-fork.png" alt="The Add dialog of Tosox/7zip with Format options" width="400"> |
+| Options are typed into *Parameters*. | **Format options...** offers them as dropdowns. |
 
-### Userdata
+## 📚 Documentation
 
-`xdb` archives can carry a userdata block, usually an LTX `[header]` section that describes a mod. It appears as `[userdata].ltx` at the top of the archive:
-edit it with F4, replace it by adding or renaming a file to that name, rename it to keep its contents as an ordinary file, or delete it to remove the block. An `xdb_ud` parameter always takes precedence.
+- [Usage](docs/usage.md): opening and editing, creating and converting archives, parameters, the fork, userdata, limitations
+- [Archive format](docs/db-format.md): how the six versions are laid out on disk
+- [Building and testing](docs/building.md): building the DLLs, the unit tests and the tests against installed games
+- [Changelog](CHANGELOG.md)
 
-### What 7-Zip shows
+## 🙏 Acknowledgements
 
-- Archive properties: **Userdata** (the userdata text) and **DB-Format** (the detected version)
-- File columns: **Method** is `LZO`, `LZHUF` or `Store`; **CRC** only for versions that store one (`2945` and later)
-
-### Limitations
-
-- Writing to standard output (`-so`) is not supported: the archive's size fields are filled in after the files are written.
-- Archives are limited to 4 GiB by the format.
-- File names must be representable in the Windows Cyrillic code page (CP1251), like the game expects.
-- A file can't share its name with another file or a folder; a rename or copy that would cause this is refused.
-
-## 🛠 Build
-
-1. **Fetch submodules**
-   ```pwsh
-   git submodule update --init --recursive
-   ```
-2. **Configure, build and test**
-   ```pwsh
-   cmake -S . -B _build/x64 -G "Visual Studio 17 2022" -A x64
-   cmake --build _build/x64 --config Release
-   ctest --test-dir _build/x64 -C Release
-   ```
-   * Win32 build: replace `-A x64` with `-A Win32` and use `_build/Win32`.
-   * Tested generators: `Visual Studio 17 2022`, `Visual Studio 18 2026`.
-   * The tests download GoogleTest during configuration. Pass `-DXDB_BUILD_TESTS=OFF` to skip them.
-   * To also run the tests against real game archives, set `XDB_TEST_ARCHIVES` to a semicolon-separated list of archive paths.
-   * To check that installed games load the archives the plugin writes, see [`tests/game`](tests/game/README.md).
-
-3. **Result**
-   - `_build/x64/bin/Release/XDB_x64.dll`
-   - `_build/Win32/bin/Release/XDB_x86.dll`
-
-## 📂 Layout
-
-- `CPP/7zip/Archive/Xdb` - plugin sources
-  - `XdbHandler.*`, `XdbHandlerOut.cpp` - the 7-Zip handler: listing, extraction, properties, updating
-  - `XdbIn.*` - reading archives and detecting their version
-  - `XdbUpdate.*`, `XdbOut.*` - writing archives
-  - `XdbHeader.*`, `XdbFormat.*` - the file table and on-disk constants
-  - `XdbLzhuf.*`, `XdbScrambler.*`, `XdbCodec.*` - compression and the header cipher
-  - `XdbRegister.cpp` - format registration
-- `docs/db-format.md` - description of the archive format
-- `tests` - unit tests (GoogleTest); `tests/game` - tests against installed games
-- `third_party/7zip` - upstream 7‑Zip sources
-- `third_party/lzokay` - LZO1X compression
-- `third_party/xray_re-tools` - reference implementation, used only by the tests
+- **bardak (setback)** for [xray_re-tools](https://github.com/abramcumner/xray_re-tools): the format
+  knowledge, the header cipher and the LZHUF port come from his work, and the tests check the
+  plugin against it. Thanks to abramcumner for keeping the mirror alive.
+- **Igor Pavlov** for [7-Zip](https://www.7-zip.org) and its plugin interface.
+- **Jack Andersen** for [lzokay](https://github.com/AxioDL/lzokay), the LZO1X compressor.
+- **Haruyasu Yoshizaki, Haruhiko Okumura and Kenji Rikitake** for LZHUF.
+- **GSC Game World** for S.T.A.L.K.E.R. and the X-Ray engine.
 
 ## 📄 License
 
