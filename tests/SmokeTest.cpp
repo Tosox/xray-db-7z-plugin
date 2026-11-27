@@ -86,6 +86,10 @@ TEST_F(PluginDll, ExportsFormatOptions)
   const std::wstring schema = value.bstrVal;
   SysFreeString(value.bstrVal);
   EXPECT_EQ(schema.rfind(L"version=1\n", 0), 0u);
+  EXPECT_NE(schema.find(L"\nignore=level|threads|memory|volumes\n"), std::wstring::npos);
+  // What auto does for a new archive (UpdateTest checks the plugin does it).
+  EXPECT_NE(schema.find(L"\nnew_default=xdb\n"), std::wstring::npos);
+  EXPECT_NE(schema.find(L"\nnew_default=on\n"), std::wstring::npos);
   for (const wchar_t *option : { L"[dbver]", L"[compress]", L"[xdb_ud]", L"[gen_xdb_ud]" })
     EXPECT_NE(schema.find(option), std::wstring::npos) << option;
 }

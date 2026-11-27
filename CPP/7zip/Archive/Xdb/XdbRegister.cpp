@@ -72,19 +72,25 @@ REGISTER_ARC_IO(
 */
 static const char k_FormatOptions[] =
     "version=1\n"
+    // The Add dialog's settings that SetProperties() accepts but doesn't use, and splitting,
+    // as the games can't read split archives.
+    "ignore=level|threads|memory|volumes\n"
     "[dbver]\n"
     "type=enum\n"
     "values=auto|xdb|2947ww|2947ru|2945|2215|11xx\n"
-    "labels=Auto|xdb (Clear Sky, Call of Pripyat)|2947ww (Shadow of Chernobyl)"
+    "labels=Keep existing|xdb (Clear Sky, Call of Pripyat)|2947ww (Shadow of Chernobyl)"
         "|2947ru (Shadow of Chernobyl, Russian)|2945|2215|11xx\n"
+    // What auto means for a new archive, so the fork's dialog can show that instead.
+    "new_values=xdb|2947ww|2947ru|2945|2215|11xx\n"
+    "new_default=xdb\n"
     "label=DB version\n"
-    "tip=Auto keeps the version of an existing archive and uses xdb for new ones\n"
     "[compress]\n"
     "type=enum\n"
     "values=auto|on|off\n"
-    "labels=Auto|Always|Never\n"
+    "labels=Keep existing|Compress|Store\n"
+    "new_values=on|off\n"
+    "new_default=on\n"
     "label=Compression\n"
-    "tip=Auto follows the archive being updated; new archives are compressed\n"
     "[xdb_ud]\n"
     "type=file\n"
     "label=Userdata file\n"

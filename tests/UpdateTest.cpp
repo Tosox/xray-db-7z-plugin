@@ -136,6 +136,14 @@ TEST(Update, NewArchivesDefaultToXdbWithGeneratedUserData)
   EXPECT_FALSE(ReadArchive(bytes).UserDataDefined);
 }
 
+// The schema's new_default=on promises this.
+TEST(Update, NewArchivesAreCompressed)
+{
+  CBytes bytes;
+  ASSERT_EQ(RunUpdate(CreateHandler(), { NewFile(L"a.ltx", MakeTextBytes(5000, 1)) }, bytes), S_OK);
+  EXPECT_NE(ReadArchive(bytes).Items[0].Method, kMethod_Store);
+}
+
 TEST(Update, CompressOffStoresEverything)
 {
   CBytes bytes;

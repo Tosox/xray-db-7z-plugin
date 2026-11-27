@@ -19,7 +19,10 @@ A rewrite of the plugin, with tests against every archive version and checks in 
   as errors.
 - Folders get their own records, as the original packer writes them.
 - With the [Tosox/7zip](https://github.com/Tosox/7zip) fork, the Add dialog's
-  **Format options...** button shows the parameters as regular controls.
+  **Format options...** button shows the parameters as regular controls, and the level,
+  CPU threads and memory settings, which the plugin ignores, are greyed out. So is
+  *Split to volumes*, as the games can't read split archives. For a new archive it offers
+  the real choices (`xdb`, Compress) instead of "Keep existing".
 - The DLL carries its version and a description in its file properties.
 
 ### Changes
