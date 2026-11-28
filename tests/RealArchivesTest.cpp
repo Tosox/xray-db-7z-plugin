@@ -29,10 +29,12 @@ namespace {
 std::vector<std::string> GetArchivePaths()
 {
   std::vector<std::string> paths;
-  const char *list = getenv("XDB_TEST_ARCHIVES");
+  // Read as UTF-16 and kept as UTF-8: getenv() would give the ANSI code page and lose
+  // characters such as the Cyrillic in some game folders.
+  const wchar_t *list = _wgetenv(L"XDB_TEST_ARCHIVES");
   if (!list)
     return paths;
-  std::string s = list;
+  std::string s = (const char *)UnicodeStringToMultiByte(UString(list), CP_UTF8);
   size_t start = 0;
   while (start <= s.size())
   {
