@@ -1,18 +1,35 @@
-This project includes code derived from xray_re-tools.
+xray-db-7z-plugin
+Copyright (C) 2026 Tosox
 
-Original project:
-http://xray.codeplex.com/
-Author: bardak (setback)
+This program is free software: you can redistribute it and/or modify it
+under the terms of the GNU General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option)
+any later version. See LICENSE.
 
-Mirror used:
-https://github.com/abramcumner/xray_re-tools
+The plugin binaries contain the following third-party code:
 
-The original project does not provide a standard open-source
-license. Use is based on the permission statement from the
-upstream project: "you can do whatever you want, just do not
-say you wrote it."
+- 7-Zip (third_party/7zip), by Igor Pavlov, under the GNU LGPL v2.1 or
+  later. The plugin uses none of 7-Zip's RAR, LZFSE or Zstandard code, so
+  their additional terms don't apply. See licenses/7zip-License.txt.
 
-This project also bundles:
-- 7-Zip source code (third_party/7zip), primarily under the GNU LGPL v2.1 or later, with BSD-licensed files and an unRAR license restriction for RAR code. See third_party/7zip/DOC/License.txt and unRarLicense.txt.
+- lzokay (third_party/lzokay), by Jack Andersen, under the MIT license.
+  See licenses/lzokay-LICENSE.txt. Used for LZO1X compression.
+
+- LZHUF (CPP/7zip/Archive/Xdb/XdbLzhuf.cpp), a port of LZHUF.C
+  (c) 1989 by Haruyasu Yoshizaki, Haruhiko Okumura and Kenji Rikitake:
+  "All rights reserved. Permission granted for non-commercial use."
+  This restriction applies to that component. It is not covered by the
+  GPL, and its notice is kept as it is.
+
+The format knowledge (docs/db-format.md), the header cipher and the LZHUF
+port are based on xray_re-tools by bardak (setback),
+http://xray.codeplex.com/ (closed), mirrored at
+https://github.com/abramcumner/xray_re-tools. The original project does not
+provide a standard open-source license; its permission statement reads:
+"you can do whatever you want, just do not say you wrote it."
+
+The tests additionally build xray_re-tools sources and its bundled miniLZO
+(GNU GPL v2) as reference implementations. Neither is part of the plugin
+binaries.
 
 All third-party components remain under their respective licenses.

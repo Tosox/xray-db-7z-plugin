@@ -1,0 +1,18 @@
+; Exports of the xdb format plugin: 7-Zip's archive exports (third_party/7zip/CPP/7zip/Archive/
+; Archive2.def) without the codec and hasher ones, plus GetFormatOptions, which the Tosox/7zip
+; fork reads to build its "Format options" dialog. Listing it here keeps the name undecorated on Win32.
+
+EXPORTS
+  CreateObject PRIVATE
+
+  GetHandlerProperty PRIVATE
+  GetNumberOfFormats PRIVATE
+  GetHandlerProperty2 PRIVATE
+  GetIsArc PRIVATE
+
+  SetLargePageMode PRIVATE
+  SetCaseSensitive PRIVATE
+
+  GetModuleProp PRIVATE
+
+  GetFormatOptions PRIVATE

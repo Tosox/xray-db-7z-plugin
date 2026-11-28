@@ -1,0 +1,35 @@
+// Xdb.rc.in
+// File properties of the plugin DLL, as Windows shows them. CMake fills in the
+// @...@ values; the version comes from project() in CMakeLists.txt.
+
+#include <winver.h>
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION     @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
+PRODUCTVERSION  @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
+FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK
+FILEFLAGS       0
+FILEOS          VOS_NT_WINDOWS32
+FILETYPE        VFT_DLL
+FILESUBTYPE     VFT2_UNKNOWN
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904B0"
+    BEGIN
+      VALUE "CompanyName",      "Tosox"
+      VALUE "FileDescription",  "S.T.A.L.K.E.R. DB archive plugin for 7-Zip"
+      VALUE "FileVersion",      "@PROJECT_VERSION@"
+      VALUE "InternalName",     "@XDB_DLL_NAME@"
+      VALUE "LegalCopyright",   "Copyright (C) 2026 Tosox. GNU GPL v3 or later."
+      VALUE "OriginalFilename", "@XDB_DLL_NAME@.dll"
+      VALUE "ProductName",      "Xray DB 7z Plugin"
+      VALUE "ProductVersion",   "@PROJECT_VERSION@"
+      VALUE "Comments",         "https://github.com/Tosox/xray-db-7z-plugin"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1200
+  END
+END
