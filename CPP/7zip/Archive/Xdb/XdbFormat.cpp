@@ -81,7 +81,9 @@ HRESULT PathToItemName(const UString &path, AString &name)
 
   bool defaultCharUsed = false;
   name = UnicodeStringToMultiByte(s, kNameCodePage, '_', defaultCharUsed);
-  if (defaultCharUsed)
+  // The round trip also catches Windows' "best fit" replacements, which change ü to u without
+  // reporting it: a name must be stored exactly as given, or the game won't find the file.
+  if (defaultCharUsed || MultiByteToUnicodeString(name, kNameCodePage) != s)
     return k_hres_NotInCodePage;
   // The engine looks names up in lowercase; only ASCII is folded, as in the original tools.
   name.MakeLower_Ascii();

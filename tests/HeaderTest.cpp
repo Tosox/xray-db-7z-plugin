@@ -325,6 +325,11 @@ TEST(ItemName, StripsSeparatorsAndRejectsEmptyOrUnencodable)
   EXPECT_EQ(PathToItemName(UString(L"\\"), name), k_hres_BadName);
   EXPECT_EQ(PathToItemName(UString(L"a\\/b"), name), k_hres_BadName);
   EXPECT_EQ(PathToItemName(UString(L"日本.ltx"), name), k_hres_NotInCodePage);
+  // Windows would store these as "muller", "cafe" and "a" without saying so.
+  for (const wchar_t *changed : { L"müller.ltx", L"café.ltx", L"Ä.txt", L"ŝ.txt" })
+    EXPECT_EQ(PathToItemName(UString(changed), name), k_hres_NotInCodePage) << changed;
+  // CP1251 has these, so they're kept.
+  EXPECT_EQ(PathToItemName(UString(L"€ №1 «x».ltx"), name), S_OK);
 }
 
 TEST(Version, FindByName)

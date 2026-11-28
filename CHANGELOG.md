@@ -31,6 +31,9 @@ To upgrade, replace the DLL in 7-Zip's `Formats` folder.
 ### Fixed
 - Damaged archives are reported as errors and can no longer crash 7-Zip.
 - Cyrillic file names are stored correctly on every Windows, not only on Russian ones.
+- Names with accented Latin letters such as `ü` or `é` are refused, instead of being stored
+  as `u` or `e` without a word.
+- The plugin no longer adds a second "Copy" codec and "CRC32" hasher to 7-Zip.
 - Converting between versions no longer produces broken archives, for example from `11xx`
   to `xdb`.
 - `11xx` archives whose files are all compressed open as `11xx`, not `2215`, and show the
