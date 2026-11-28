@@ -52,8 +52,10 @@ From the command line:
 ```pwsh
 7z a mymod.db0 .\gamedata\* -txdb
 7z a mymod.db0 .\gamedata\* -txdb -mdbver=2947ww -mcompress=off
-7z u old_build.db -txdb -mdbver=xdb      # converts an archive to xdb
+7z u old_build.db -txdb -mdbver=xdb -x!*   # converts an archive to xdb
 ```
+
+The `-x!*` matters: without file names, 7-Zip's `u` adds everything in the current folder.
 
 ## Parameters
 
@@ -127,5 +129,7 @@ An `xdb_ud` parameter always takes precedence.
 
 - Writing to standard output (`-so`) is not supported: the archive's size fields are filled in after the files are written.
 - Archives are limited to 4 GiB by the format.
+- Files over 256 MiB are always stored uncompressed, as files are compressed in memory.
 - File names must be representable in the Windows Cyrillic code page (CP1251), like the game expects.
+  Other characters, including accented Latin letters such as `ü` or `é`, are refused.
 - A file can't share its name with another file or a folder; a rename or copy that would cause this is refused.
