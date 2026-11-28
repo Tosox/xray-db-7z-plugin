@@ -61,12 +61,9 @@ set(Z7_SOURCES
   ${Z7_ROOT}/CPP/7zip/Common/UniqBlocks.cpp
   ${Z7_ROOT}/CPP/7zip/Common/VirtThread.cpp
 
-  ${Z7_ROOT}/CPP/7zip/Compress/CodecExports.cpp
   ${Z7_ROOT}/CPP/7zip/Compress/CopyCoder.cpp
-  ${Z7_ROOT}/CPP/7zip/Compress/CopyRegister.cpp
 
   ${Z7_ROOT}/CPP/Common/CRC.cpp
-  ${Z7_ROOT}/CPP/Common/CrcReg.cpp
   ${Z7_ROOT}/CPP/Common/IntToString.cpp
   ${Z7_ROOT}/CPP/Common/LzFindPrepare.cpp
   ${Z7_ROOT}/CPP/Common/MyString.cpp
@@ -124,7 +121,7 @@ target_compile_definitions(xdb_core PUBLIC
 if(MSVC)
   target_compile_options(xdb_core PUBLIC /utf-8 $<$<COMPILE_LANGUAGE:CXX>:/EHsc>)
   # Our own code is held to a stricter standard than the third-party sources.
-  set_source_files_properties(${XDB_SOURCES} ${XDB_DIR}/XdbRegister.cpp PROPERTIES COMPILE_OPTIONS "/W4;/WX")
+  set_source_files_properties(${XDB_SOURCES} ${XDB_DIR}/XdbRegister.cpp ${XDB_DIR}/XdbExports.cpp PROPERTIES COMPILE_OPTIONS "/W4;/WX")
 endif()
 
 # --- Plugin DLL -------------------------------------------------------------
@@ -138,12 +135,16 @@ configure_file(${XDB_DIR}/Xdb.rc.in ${CMAKE_BINARY_DIR}/Xdb.rc @ONLY)
 
 add_library(Xdb SHARED
   ${XDB_DIR}/XdbRegister.cpp
+  ${XDB_DIR}/XdbExports.cpp
   ${XDB_DIR}/Xdb.def
   ${CMAKE_BINARY_DIR}/Xdb.rc
   ${Z7_ROOT}/CPP/7zip/Archive/ArchiveExports.cpp
-  ${Z7_ROOT}/CPP/7zip/Archive/DllExports2.cpp
 )
 target_link_libraries(Xdb PRIVATE xdb_core)
+target_compile_definitions(Xdb PRIVATE
+  XDB_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
+  XDB_VERSION_MINOR=${PROJECT_VERSION_MINOR}
+)
 
 set_target_properties(Xdb PROPERTIES
   OUTPUT_NAME ${XDB_DLL_NAME}
