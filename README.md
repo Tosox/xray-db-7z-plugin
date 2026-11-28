@@ -88,6 +88,7 @@ edit it with F4, replace it by adding or renaming a file to that name, rename it
    * Tested generators: `Visual Studio 17 2022`, `Visual Studio 18 2026`.
    * The tests download GoogleTest during configuration. Pass `-DXDB_BUILD_TESTS=OFF` to skip them.
    * To also run the tests against real game archives, set `XDB_TEST_ARCHIVES` to a semicolon-separated list of archive paths.
+   * To check that installed games load the archives the plugin writes, see [`tests/game`](tests/game/README.md).
 
 3. **Result**
    - `_build/x64/bin/Release/XDB_x64.dll`
@@ -103,7 +104,7 @@ edit it with F4, replace it by adding or renaming a file to that name, rename it
   - `XdbLzhuf.*`, `XdbScrambler.*`, `XdbCodec.*` - compression and the header cipher
   - `XdbRegister.cpp` - format registration
 - `docs/db-format.md` - description of the archive format
-- `tests` - unit tests (GoogleTest)
+- `tests` - unit tests (GoogleTest); `tests/game` - tests against installed games
 - `third_party/7zip` - upstream 7‑Zip sources
 - `third_party/lzokay` - LZO1X compression
 - `third_party/xray_re-tools` - reference implementation, used only by the tests
